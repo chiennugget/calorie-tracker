@@ -14,13 +14,14 @@ import { loadAiConfig } from '../lib/aiScan'
 import { HawkerPicker } from './HawkerPicker'
 import { POPULAR_SG_DISHES, searchSgDishes, type SgDish } from '../lib/sgFoods'
 
-type Tab = 'quick' | 'meals' | 'recent' | 'search' | 'scan'
+export type Tab = 'quick' | 'meals' | 'recent' | 'search' | 'scan'
 
 export function AddFoodSheet({
   open,
   onClose,
   date,
   initialSlot,
+  initialTab,
   data,
   onOpenAiSettings,
 }: {
@@ -28,6 +29,7 @@ export function AddFoodSheet({
   onClose: () => void
   date: DateKey
   initialSlot: MealSlot
+  initialTab?: Tab
   data: AppData
   onOpenAiSettings?: () => void
 }) {
@@ -37,6 +39,9 @@ export function AddFoodSheet({
   useEffect(() => {
     if (open) setSlot(initialSlot)
   }, [open, initialSlot])
+  useEffect(() => {
+    if (open && initialTab) setTab(initialTab)
+  }, [open, initialTab])
 
   const add = (f: {
     name: string

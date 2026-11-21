@@ -94,8 +94,15 @@ export function Progress({ data }: { data: AppData }) {
                 tickFormatter={(d) => (range === '7' ? fromDateKey(d).toLocaleDateString(undefined, { weekday: 'short' }) : formatShort(d))}
                 tick={{ fontSize: 11, fill: 'var(--muted)' }}
                 minTickGap={16}
+                axisLine={false}
+                tickLine={false}
               />
-              <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+              <YAxis
+                tick={{ fontSize: 11, fill: 'var(--muted)' }}
+                axisLine={false}
+                tickLine={false}
+                domain={[0, (max: number) => Math.ceil(Math.max(max, goal * 1.08) / 100) * 100]}
+              />
               <Tooltip
                 labelFormatter={(l) => formatShort(String(l))}
                 formatter={(v) => [`${v} kcal`, 'Eaten']}
@@ -103,7 +110,7 @@ export function Progress({ data }: { data: AppData }) {
                 contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8 }}
               />
               <ReferenceLine y={goal} stroke="var(--muted)" strokeDasharray="4 4" label={{ value: 'Goal', position: 'insideTopRight', fontSize: 11, fill: 'var(--muted)' }} />
-              <Bar dataKey="calories" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+              <Bar dataKey="calories" radius={[8, 8, 8, 8]} isAnimationActive={false}>
                 {chart.map((c) => (
                   <Cell key={c.date} fill={c.over ? 'var(--bad)' : 'var(--accent)'} />
                 ))}

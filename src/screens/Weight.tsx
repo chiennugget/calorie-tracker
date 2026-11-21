@@ -112,8 +112,8 @@ export function Weight({ data }: { data: AppData }) {
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={chart} margin={{ top: 10, right: 8, bottom: 0, left: -16 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" vertical={false} />
-                  <XAxis dataKey="date" tickFormatter={formatShort} tick={{ fontSize: 11, fill: 'var(--muted)' }} minTickGap={24} />
-                  <YAxis domain={['dataMin - 1', 'dataMax + 1']} tick={{ fontSize: 11, fill: 'var(--muted)' }} allowDecimals={false} />
+                  <XAxis dataKey="date" tickFormatter={formatShort} tick={{ fontSize: 11, fill: 'var(--muted)' }} minTickGap={24} axisLine={false} tickLine={false} />
+                  <YAxis domain={['dataMin - 1', 'dataMax + 1']} tick={{ fontSize: 11, fill: 'var(--muted)' }} allowDecimals={false} axisLine={false} tickLine={false} />
                   <Tooltip
                     labelFormatter={(l) => formatShort(String(l))}
                     formatter={(v, n) => [`${v} ${unit}`, n === 'trend' ? 'Trend' : 'Weight']}

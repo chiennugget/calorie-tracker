@@ -123,14 +123,27 @@ export function ProgressBar({ value, goal, className = '' }: { value: number; go
   )
 }
 
-export function Ring({ value, goal, size = 120, children }: { value: number; goal: number; size?: number; children?: ReactNode }) {
-  const stroke = 10
+export function Ring({
+  value,
+  goal,
+  size = 120,
+  stroke = 10,
+  className = '',
+  children,
+}: {
+  value: number
+  goal: number
+  size?: number
+  stroke?: number
+  className?: string
+  children?: ReactNode
+}) {
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
   const pct = goal > 0 ? Math.min(1, value / goal) : 0
   const over = goal > 0 && value > goal
   return (
-    <div className="ring" style={{ width: size, height: size }}>
+    <div className={`ring ${className}`} style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <circle cx={size / 2} cy={size / 2} r={r} className="ring-track" strokeWidth={stroke} fill="none" />
         <circle

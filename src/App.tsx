@@ -1,7 +1,9 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { AddFoodSheet } from './components/AddFoodSheet'
+import { AddFoodSheet, type Tab as AddTab } from './components/AddFoodSheet'
+import { IconChart, IconChevronLeft, IconHome, IconScale, IconScan, IconUser } from './components/Icons'
 import { Toaster } from './components/toast'
-import { today } from './lib/date'
+import { formatDayLabel, fromDateKey, today } from './lib/date'
+import { loggingStreak } from './lib/nutrition'
 import type { DateKey, MealSlot } from './lib/types'
 import { useAppData } from './lib/useStore'
 import { Diary } from './screens/Diary'
@@ -13,11 +15,11 @@ const Weight = lazy(() => import('./screens/Weight').then((m) => ({ default: m.W
 
 type Tab = 'diary' | 'progress' | 'weight' | 'settings'
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'diary', label: 'Diary', icon: '📖' },
-  { id: 'progress', label: 'Progress', icon: '📊' },
-  { id: 'weight', label: 'Weight', icon: '⚖️' },
-  { id: 'settings', label: 'More', icon: '⚙️' },
+const TABS: { id: Tab; label: string; Icon: typeof IconHome }[] = [
+  { id: 'diary', label: 'Today', Icon: IconHome },
+  { id: 'progress', label: 'Progress', Icon: IconChart },
+  { id: 'weight', label: 'Weight', Icon: IconScale },
+  { id: 'settings', label: 'Settings', Icon: IconUser },
 ]
 
 /** Default meal slot based on time of day. */
@@ -34,6 +36,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('diary')
   const [date, setDate] = useState<DateKey>(today())
   const [addSlot, setAddSlot] = useState<MealSlot | null>(null)
+  const [addTab, setAddTab] = useState<AddTab | undefined>(undefined)
   const [lastSlot, setLastSlot] = useState<MealSlot>(slotForNow())
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null)
 
@@ -68,24 +71,52 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
-  const openAdd = (slot: MealSlot) => {
+  const openAdd = (slot: MealSlot, tab?: AddTab) => {
     setLastSlot(slot)
+    setAddTab(tab)
     setAddSlot(slot)
   }
+  const streak = loggingStreak(data, today())
+  const title =
+    tab === 'diary'
+      ? date === today()
+        ? 'Today'
+        : formatDayLabel(date)
+      : tab === 'settings'
+        ? 'Settings'
+        : TABS.find((t) => t.id === tab)!.label
+  const subtitle =
+    tab === 'diary' ? fromDateKey(date).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : null
 
   return (
     <div className="app">
       <header className="topbar">
         {tab === 'settings' && settingsPage ? (
           <button className="topbar-back" onClick={closeSettingsPage} aria-label="Back to Settings">
-            <span className="chev-left" aria-hidden>
-              ‹
-            </span>
+            <IconChevronLeft size={26} strokeWidth={2.6} />
             Settings
           </button>
         ) : (
-          <h1>{tab === 'settings' ? 'Settings' : TABS.find((t) => t.id === tab)!.label}</h1>
+          <div className="title-block">
+            {subtitle && <p className="eyebrow">{subtitle}</p>}
+            <h1>{title}</h1>
+          </div>
         )}
+        <div className="topbar-pill">
+          <span className="streak-count" title={`${streak}-day logging streak`}>
+            <span aria-hidden>🔥</span> {streak}
+          </span>
+          <span className="divider" />
+          <button
+            className="avatar-btn"
+            aria-label="Settings"
+            onClick={() => {
+              if (tab !== 'settings') switchTab('settings')
+            }}
+          >
+            <IconUser size={20} />
+          </button>
+        </div>
       </header>
       <main>
         <Suspense fallback={<div className="screen muted">Loading…</div>}>
@@ -101,15 +132,21 @@ export default function App() {
       </main>
 
       {tab === 'diary' && (
-        <button className="fab" aria-label="Add food" onClick={() => openAdd(slotForNow())}>
-          +
-        </button>
+        <div className="action-pill">
+          <button className="action-pill-main" onClick={() => openAdd(slotForNow())}>
+            <span className="action-title">Log food</span>
+            <span className="action-sub">Search hawker food, meals or quick add</span>
+          </button>
+          <button className="action-pill-btn" aria-label="Scan food" onClick={() => openAdd(slotForNow(), 'scan')}>
+            <IconScan size={24} />
+          </button>
+        </div>
       )}
 
       <nav className="tabbar">
         {TABS.map((t) => (
           <button key={t.id} className={t.id === tab ? 'active' : ''} onClick={() => switchTab(t.id)}>
-            <span aria-hidden>{t.icon}</span>
+            <t.Icon size={24} strokeWidth={t.id === tab ? 2.4 : 2} />
             {t.label}
           </button>
         ))}
@@ -120,6 +157,7 @@ export default function App() {
         onClose={() => setAddSlot(null)}
         date={date}
         initialSlot={addSlot ?? lastSlot}
+        initialTab={addTab}
         data={data}
         onOpenAiSettings={() => {
           setAddSlot(null)

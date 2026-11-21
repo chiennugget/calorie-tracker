@@ -7,6 +7,8 @@ import { addDays, formatDayLabel, fromDateKey, today } from '../lib/date'
 import { daySummary, entriesFor, entryTotal, sumEntries } from '../lib/nutrition'
 import { shouldRemindBackup, weekBudget, weekOf } from '../lib/insights'
 import { downloadBackup } from '../lib/backup'
+import { useCloud } from '../cloud/cloud'
+import { BLOCK_MESSAGES } from '../lib/cloudBackup'
 import { displayWater, waterIncrements } from '../lib/units'
 import { store } from '../lib/useStore'
 import type { AppData, DateKey, FoodEntry, MealSlot } from '../lib/types'
@@ -73,12 +75,14 @@ export function Diary({
   setDate,
   onAdd,
   onOpenCalculator,
+  onOpenCloud,
 }: {
   data: AppData
   date: DateKey
   setDate: (d: DateKey) => void
   onAdd: (slot: MealSlot) => void
   onOpenCalculator: () => void
+  onOpenCloud: () => void
 }) {
   const s = daySummary(data, date)
   const g = data.settings.goals
@@ -87,7 +91,11 @@ export function Diary({
   const [copying, setCopying] = useState<MealSlot | null>(null)
   const week = weekBudget(data, date)
   const [now] = useState(() => Date.now())
+  const cloud = useCloud()
+  const cloudOn = cloud.configured && !!cloud.email
+  // Cloud uploads update meta.lastBackupAt, so with cloud on this only shows if it has stopped working for a while.
   const remindBackup = shouldRemindBackup(data, now)
+  const cloudPaused = cloudOn && cloud.status === 'blocked' && cloud.block && cloud.block !== 'not-onboarded' ? cloud.block : null
   const over = s.remaining < 0
   const pct = s.goal > 0 ? Math.min(100, Math.round((s.food.calories / s.goal) * 100)) : 0
   const waterPct = g.waterMl > 0 ? Math.min(100, (s.water / g.waterMl) * 100) : 0
@@ -102,8 +110,20 @@ export function Diary({
         </button>
       )}
 
-      {!data.meta.onboarded && !data.entries.length && <WelcomeCard onOpenCalculator={onOpenCalculator} />}
-      {remindBackup && <BackupReminder data={data} />}
+      {!data.meta.onboarded && !data.entries.length && (
+        <WelcomeCard onOpenCalculator={onOpenCalculator} onOpenCloud={cloud.configured ? onOpenCloud : undefined} />
+      )}
+      {cloudPaused && (
+        <section className="card notice-card" role="region" aria-label="Cloud backup paused">
+          <p className="small">
+            <b>☁️ Cloud backup paused.</b> {BLOCK_MESSAGES[cloudPaused]}
+          </p>
+          <button className="btn primary" onClick={onOpenCloud}>
+            Review cloud backup
+          </button>
+        </section>
+      )}
+      {remindBackup && !cloudPaused && <BackupReminder data={data} onOpenCloud={cloud.configured && !cloudOn ? onOpenCloud : undefined} />}
 
       <section className={`hero-card ${over ? 'over' : ''}`}>
         <div className="hero-text">
@@ -292,12 +312,13 @@ export function Diary({
   )
 }
 
-function WelcomeCard({ onOpenCalculator }: { onOpenCalculator: () => void }) {
+function WelcomeCard({ onOpenCalculator, onOpenCloud }: { onOpenCalculator: () => void; onOpenCloud?: () => void }) {
   return (
     <section className="card welcome-card">
       <h3>Welcome 👋</h3>
       <p className="small">
-        Everything stays on this phone, with no account. Start by working out your calorie and protein targets. It takes about 30 seconds.
+        Everything stays on this phone, with no account needed. Start by working out your calorie and protein targets. It takes about 30
+        seconds.
       </p>
       <div className="row gap wrap">
         <button className="btn primary" onClick={onOpenCalculator}>
@@ -307,12 +328,20 @@ function WelcomeCard({ onOpenCalculator }: { onOpenCalculator: () => void }) {
           Use defaults
         </button>
       </div>
+      {onOpenCloud && (
+        <p className="small">
+          Used this app before?{' '}
+          <button className="link" onClick={onOpenCloud}>
+            Restore from cloud backup
+          </button>
+        </p>
+      )}
       <p className="muted small">Tip: add this page to your home screen to use it like an app, even offline.</p>
     </section>
   )
 }
 
-function BackupReminder({ data }: { data: AppData }) {
+function BackupReminder({ data, onOpenCloud }: { data: AppData; onOpenCloud?: () => void }) {
   const never = !data.meta.lastBackupAt
   return (
     <section className="card notice-card" role="region" aria-label="Backup reminder">
@@ -320,8 +349,13 @@ function BackupReminder({ data }: { data: AppData }) {
         <b>💾 {never ? "You haven't backed up yet." : 'Time for a backup.'}</b> Your diary only lives in this browser. Clearing site
         data or losing your phone would erase it.
       </p>
-      <div className="row gap">
-        <button className="btn primary" onClick={() => downloadBackup(data)}>
+      <div className="row gap wrap">
+        {onOpenCloud && (
+          <button className="btn primary" onClick={onOpenCloud}>
+            Turn on cloud backup
+          </button>
+        )}
+        <button className={`btn ${onOpenCloud ? '' : 'primary'}`} onClick={() => downloadBackup(data)}>
           Download backup
         </button>
         <button className="btn ghost" onClick={() => store.updateMeta({ backupReminderDismissedAt: Date.now() })}>

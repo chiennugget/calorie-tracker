@@ -1,26 +1,31 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MealForm } from '../components/MealForm'
 import { toast } from '../components/toast'
 import { NumberField, Segmented, Sheet, kcal, toNum } from '../components/ui'
 import { today } from '../lib/date'
 import { ACTIVITY_LABELS, bmr, caloriesFromMacros, sortedWeighIns, suggestGoals, tdee } from '../lib/nutrition'
 import { diaryToCsv, parseData, weighInsToCsv } from '../lib/storage'
-import { downloadBackup, downloadFile } from '../lib/backup'
+import { downloadFile, shareBackup, storagePersisted } from '../lib/backup'
+import { describeBackup } from '../lib/cloudBackup'
+import { cloudSummary, useCloud, type CloudState } from '../cloud/cloud'
+import { CloudBackupCard } from './CloudBackup'
 import { displayWeight, inputWeightToKg } from '../lib/units'
 import { store } from '../lib/useStore'
 import type { ActivityLevel, AppData, Goals, Profile, SavedMeal, Sex, WeightGoal } from '../lib/types'
 
-export type SettingsPage = 'goals' | 'calculator' | 'meals' | 'units' | 'data'
+export type SettingsPage = 'goals' | 'calculator' | 'meals' | 'units' | 'cloud' | 'data'
 
-const PAGES: { id: SettingsPage; icon: string; title: string; sub: (d: AppData) => string }[] = [
+const PAGES: { id: SettingsPage; icon: string; title: string; sub: (d: AppData, c: CloudState) => string }[] = [
   { id: 'goals', icon: '🎯', title: 'Daily goals', sub: (d) => `${d.settings.goals.calories.toLocaleString()} kcal · P ${d.settings.goals.protein} · C ${d.settings.goals.carbs} · F ${d.settings.goals.fat}` },
   { id: 'calculator', icon: '🧮', title: 'Goal calculator', sub: () => 'Work out your calories and macros' },
   { id: 'meals', icon: '⭐', title: 'My meals', sub: (d) => `${d.savedMeals.length} saved` },
   { id: 'units', icon: '📏', title: 'Units', sub: (d) => (d.settings.weightUnit === 'lb' ? 'Imperial (lb, fl oz)' : 'Metric (kg, ml)') },
+  { id: 'cloud', icon: '☁️', title: 'Cloud backup', sub: (_d, c) => cloudSummary(c) },
   { id: 'data', icon: '💾', title: 'Backup & export', sub: (d) => `${d.entries.length} diary ${d.entries.length === 1 ? 'entry' : 'entries'}` },
 ]
 
 export function Settings({ data, page, onOpen }: { data: AppData; page: SettingsPage | null; onOpen: (p: SettingsPage) => void }) {
+  const cloud = useCloud()
   if (page) {
     const meta = PAGES.find((p) => p.id === page)!
     return (
@@ -30,7 +35,8 @@ export function Settings({ data, page, onOpen }: { data: AppData; page: Settings
         {page === 'calculator' && <CalculatorCard data={data} />}
         {page === 'meals' && <MealsCard meals={data.savedMeals} />}
         {page === 'units' && <UnitsCard data={data} />}
-        {page === 'data' && <DataCard data={data} />}
+        {page === 'cloud' && <CloudBackupCard />}
+        {page === 'data' && <DataCard data={data} cloud={cloud} />}
       </div>
     )
   }
@@ -38,7 +44,7 @@ export function Settings({ data, page, onOpen }: { data: AppData; page: Settings
   return (
     <div className="screen">
       <ul className="card menu">
-        {PAGES.map((p, i) => (
+        {PAGES.filter((p) => p.id !== 'cloud' || cloud.configured).map((p, i) => (
           <li key={p.id} style={{ animationDelay: `${i * 30}ms` }}>
             <button onClick={() => onOpen(p.id)}>
               <span className="menu-icon" aria-hidden>
@@ -46,7 +52,7 @@ export function Settings({ data, page, onOpen }: { data: AppData; page: Settings
               </span>
               <span className="grow">
                 <span className="item-name">{p.title}</span>
-                <span className="muted small">{p.sub(data)}</span>
+                <span className="muted small">{p.sub(data, cloud)}</span>
               </span>
               <span className="chev" aria-hidden>
                 ›
@@ -310,17 +316,29 @@ function UnitsCard({ data }: { data: AppData }) {
   )
 }
 
-function DataCard({ data }: { data: AppData }) {
+function DataCard({ data, cloud }: { data: AppData; cloud: CloudState }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const stamp = today()
+  const [persisted, setPersisted] = useState<boolean | undefined>(undefined)
+  useEffect(() => {
+    void storagePersisted().then(setPersisted)
+  }, [])
+  const cloudOn = cloud.configured && !!cloud.email
   return (
     <section className="card">
       <p className="muted small">
-        {data.entries.length} diary entries · {data.savedMeals.length} saved meals · {data.weighIns.length} weigh-ins. Back up regularly
-        — clearing browser data deletes it.
+        {data.entries.length} diary entries · {data.savedMeals.length} saved meals · {data.weighIns.length} weigh-ins.{' '}
+        {cloudOn ? 'Cloud backup is on.' : 'Back up regularly. Clearing browser data deletes it.'}
       </p>
+      {persisted === false && (
+        <p className="hint warn">
+          This browser may clear the app’s data when space runs low or after a few weeks unused. On iPhone, add it to your Home Screen
+          (Share → Add to Home Screen) to keep it safe{cloud.configured && !cloudOn ? ', and turn on cloud backup' : ''}.
+        </p>
+      )}
+      {persisted === true && <p className="hint ok">This browser has agreed to keep the app’s data.</p>}
       <div className="row gap wrap">
-        <button className="btn" onClick={() => downloadBackup(data)}>
+        <button className="btn" onClick={() => void shareBackup(data)}>
           Export backup
         </button>
         <button className="btn" onClick={() => fileRef.current?.click()}>
@@ -344,7 +362,7 @@ function DataCard({ data }: { data: AppData }) {
           if (!file) return
           try {
             const parsed = parseData(await file.text())
-            if (confirm(`Replace all current data with this backup (${parsed.entries.length} entries)?`)) {
+            if (confirm(`Replace all data on this device with this backup?\n\n${describeBackup(parsed)}`)) {
               store.replaceAll(parsed)
               toast('Backup restored')
             }

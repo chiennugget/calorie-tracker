@@ -52,6 +52,17 @@ Pushing to `main` runs `.github/workflows/deploy.yml`, which lints, unit-tests, 
 
 (An AI photo worker used to live in `worker/`; it was removed because it wasn't being used.)
 
+**Cloud backup (optional, Supabase):**
+- It's switched on by the build variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (GitHub Actions variables, or `.env.local`). Without them the cloud UI is hidden. Setup steps are in `docs/cloud-backup.md`, and the schema is in `supabase/migrations/`.
+- localStorage stays the source of truth. The cloud holds whole-`AppData` JSON snapshots, one row per user per local day, in the `backups` table with RLS.
+- `lib/cloudBackup.ts` (pure) holds the rules:
+  - the `BackupTarget` interface
+  - `shouldAutoUpload`, the wipe safeguard that never uploads a wiped or shrunk diary over a bigger cloud copy
+  - `snapshotsToPrune` (30 daily snapshots, then monthly)
+  - `backupSignature`, which ignores `meta` so recording `lastBackupAt` doesn't trigger another upload
+- `src/cloud/cloud.ts` is the web orchestrator. It subscribes to the store, debounces uploads, uploads on `visibilitychange`, and exposes `useCloud()` plus the actions. `src/cloud/supabase.ts` is the only file that imports supabase-js and is dynamically imported, so it stays out of the main bundle.
+- Sign-in uses an emailed 6-digit code (`signInWithOtp` / `verifyOtp`), not a link, because links open outside the iOS home-screen app. A successful upload sets `meta.lastBackupAt`, which silences the backup reminder.
+
 **UI conventions:**
 - All styling lives in one file, `src/index.css`, with design tokens on `:root` and a dark-mode override. There's no CSS framework.
 - The look is a warm cream background, bold grotesk headings, royal-blue (`--accent`) pill buttons, and pastel meal cards (`--breakfast`, `--lunch`, `--dinner`, `--snacks`). Reuse the tokens rather than hard-coding colours.
@@ -70,6 +81,8 @@ Pushing to `main` runs `.github/workflows/deploy.yml`, which lints, unit-tests, 
 - E2E (`e2e/`, Playwright) runs against `vite preview` of the production build. It uses the `mobile` project (iPhone 13 viewport on Chromium) and the `desktop` project (smoke and a11y only).
   - Seed state with `seed(page, seedData({...}))` from `e2e/fixtures.ts`. Pass `null` for a fresh install.
   - Open Food Facts is mocked in every test; tests never hit the real API.
+  - The E2E build goes to `dist-e2e` with a fake Supabase URL. `mockSupabase(page, rows)` in fixtures is an in-memory fake of auth and the `backups` table, and `signedIn(page)` starts with a session; call it after `seed()`. Unmocked Supabase calls fail as if offline.
+  - The test process runs in `Asia/Singapore` like the browser (set in `playwright.config.ts`), so `day()` matches the app's today.
   - The service worker is blocked, and a11y tests emulate `reducedMotion: 'reduce'` so axe doesn't read mid-animation colours.
 - `@playwright/test` is pinned to the preinstalled browser's version (1.63.0), and `playwright-core` is pinned via `overrides`. Upgrade them together.
 

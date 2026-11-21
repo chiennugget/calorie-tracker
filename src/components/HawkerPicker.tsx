@@ -15,7 +15,7 @@ import { scaleNutrients } from '../lib/nutrition'
 import type { PickedFood } from './FoodPicker'
 import { MacroLine, NumberField, Segmented, kcal, toNum } from './ui'
 
-/** Portion / oil / add-on controls shared by the hawker picker and the AI review. */
+/** Portion / oil / add-on controls used by the hawker picker. */
 export function DishOptionsEditor({ dish, value, onChange }: { dish: SgDish; value: DishOptions; onChange: (o: DishOptions) => void }) {
   const setAddOn = (id: string, delta: number) => {
     const next = Math.max(0, (value.addOns[id] ?? 0) + delta)

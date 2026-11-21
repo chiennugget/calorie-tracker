@@ -12,7 +12,7 @@ import type { Nutrients } from './types'
  * `oilG` = grams of cooking oil / lard / coconut fat in a normal plate that the
  * "less oil" / "extra oily" adjuster scales. 0 means the dish isn't oil-sensitive.
  *
- * This file has no DOM/React dependencies: it's shared with the AI worker.
+ * This file has no DOM/React dependencies so it can be reused by a React Native port.
  */
 
 export type SgCategory = 'rice' | 'noodles' | 'malay_indian' | 'zichar_snacks' | 'breakfast' | 'drinks' | 'desserts'

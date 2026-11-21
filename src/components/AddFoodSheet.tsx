@@ -9,8 +9,6 @@ import { FoodPicker, type PickedFood } from './FoodPicker'
 import { MealForm } from './MealForm'
 import { toast } from './toast'
 import { MacroLine, NumberField, Segmented, Sheet, kcal, toNum } from './ui'
-import { AiScan } from './AiScan'
-import { loadAiConfig } from '../lib/aiScan'
 import { HawkerPicker } from './HawkerPicker'
 import { POPULAR_SG_DISHES, searchSgDishes, type SgDish } from '../lib/sgFoods'
 
@@ -23,7 +21,6 @@ export function AddFoodSheet({
   initialSlot,
   initialTab,
   data,
-  onOpenAiSettings,
 }: {
   open: boolean
   onClose: () => void
@@ -31,7 +28,6 @@ export function AddFoodSheet({
   initialSlot: MealSlot
   initialTab?: Tab
   data: AppData
-  onOpenAiSettings?: () => void
 }) {
   const [slot, setSlot] = useState<MealSlot>(initialSlot)
   const [tab, setTab] = useState<Tab>(data.savedMeals.length ? 'meals' : 'quick')
@@ -91,7 +87,7 @@ export function AddFoodSheet({
           { value: 'meals', label: 'My meals' },
           { value: 'recent', label: 'Recent' },
           { value: 'search', label: 'Search' },
-          { value: 'scan', label: 'Scan' },
+          { value: 'scan', label: 'Barcode' },
         ]}
       />
       <div className="tab-body">
@@ -110,14 +106,7 @@ export function AddFoodSheet({
         {tab === 'recent' && <RecentTab data={data} onAdd={add} />}
         {tab === 'search' && <SearchTab onAdd={(f) => add({ ...f, source: 'food' })} />}
         {tab === 'scan' && (
-          <ScanTab
-            onAdd={(items, fromAi) => {
-              items.forEach((f) => add({ ...f, source: 'food' }))
-              if (items.length > 1) toast(`Added ${items.length} items to ${SLOT_LABELS[slot]}`)
-              if (fromAi) onClose()
-            }}
-            onOpenAiSettings={onOpenAiSettings}
-          />
+          <BarcodeTab onAdd={(f) => add({ ...f, source: 'food' })} />
         )}
       </div>
     </Sheet>
@@ -302,7 +291,7 @@ function SearchTab({ onAdd }: { onAdd: (f: PickedFood) => void }) {
     setLoading(true)
     setError(null)
     try {
-      setResults(await searchFoods(term, undefined, loadAiConfig()))
+      setResults(await searchFoods(term))
       setSearchedFor(term)
     } catch {
       setError("Packaged-food search isn't responding right now. Hawker dishes above still work, or try again in a minute.")
@@ -379,27 +368,6 @@ function SearchTab({ onAdd }: { onAdd: (f: PickedFood) => void }) {
             ))}
           </ul>
         </section>
-      )}
-    </div>
-  )
-}
-
-function ScanTab({ onAdd, onOpenAiSettings }: { onAdd: (items: PickedFood[], fromAi?: boolean) => void; onOpenAiSettings?: () => void }) {
-  const [mode, setMode] = useState<'ai' | 'barcode'>('ai')
-  return (
-    <div className="stack">
-      <Segmented
-        value={mode}
-        onChange={setMode}
-        options={[
-          { value: 'ai', label: '✨ AI photo' },
-          { value: 'barcode', label: 'Barcode' },
-        ]}
-      />
-      {mode === 'ai' ? (
-        <AiScan onAdd={(items) => onAdd(items, true)} onOpenSettings={onOpenAiSettings} />
-      ) : (
-        <BarcodeTab onAdd={(f) => onAdd([f])} />
       )}
     </div>
   )

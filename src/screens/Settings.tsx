@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import { MealForm } from '../components/MealForm'
 import { toast } from '../components/toast'
-import { loadAiConfig, saveAiConfig, testAiConfig } from '../lib/aiScan'
 import { NumberField, Segmented, Sheet, kcal, toNum } from '../components/ui'
 import { today } from '../lib/date'
 import { ACTIVITY_LABELS, bmr, caloriesFromMacros, sortedWeighIns, suggestGoals, tdee } from '../lib/nutrition'
@@ -10,13 +9,12 @@ import { displayWeight, inputWeightToKg } from '../lib/units'
 import { store } from '../lib/useStore'
 import type { ActivityLevel, AppData, Goals, Profile, SavedMeal, Sex, WeightGoal } from '../lib/types'
 
-export type SettingsPage = 'goals' | 'calculator' | 'meals' | 'ai' | 'units' | 'data'
+export type SettingsPage = 'goals' | 'calculator' | 'meals' | 'units' | 'data'
 
 const PAGES: { id: SettingsPage; icon: string; title: string; sub: (d: AppData) => string }[] = [
   { id: 'goals', icon: '🎯', title: 'Daily goals', sub: (d) => `${d.settings.goals.calories.toLocaleString()} kcal · P ${d.settings.goals.protein} · C ${d.settings.goals.carbs} · F ${d.settings.goals.fat}` },
   { id: 'calculator', icon: '🧮', title: 'Goal calculator', sub: () => 'Work out your calories and macros' },
   { id: 'meals', icon: '⭐', title: 'My meals', sub: (d) => `${d.savedMeals.length} saved` },
-  { id: 'ai', icon: '✨', title: 'AI food scan', sub: () => (loadAiConfig() ? 'Connected' : 'Not set up') },
   { id: 'units', icon: '📏', title: 'Units', sub: (d) => (d.settings.weightUnit === 'lb' ? 'Imperial (lb, fl oz)' : 'Metric (kg, ml)') },
   { id: 'data', icon: '💾', title: 'Backup & export', sub: (d) => `${d.entries.length} diary ${d.entries.length === 1 ? 'entry' : 'entries'}` },
 ]
@@ -30,7 +28,6 @@ export function Settings({ data, page, onOpen }: { data: AppData; page: Settings
         {page === 'goals' && <GoalsCard data={data} />}
         {page === 'calculator' && <CalculatorCard data={data} />}
         {page === 'meals' && <MealsCard meals={data.savedMeals} />}
-        {page === 'ai' && <AiSettingsCard />}
         {page === 'units' && <UnitsCard data={data} />}
         {page === 'data' && <DataCard data={data} />}
       </div>
@@ -284,100 +281,6 @@ function MealsCard({ meals }: { meals: SavedMeal[] }) {
         )}
       </Sheet>
     </section>
-  )
-}
-
-function AiSettingsCard() {
-  const existing = loadAiConfig()
-  const [endpoint, setEndpoint] = useState(existing?.endpoint ?? '')
-  const [token, setToken] = useState(existing?.token ?? '')
-  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const save = async () => {
-    const cfg = { endpoint: endpoint.trim(), token: token.trim() }
-    if (!/^https:\/\//.test(cfg.endpoint)) return setStatus({ ok: false, text: 'The server URL should start with https://' })
-    setBusy(true)
-    setStatus(null)
-    try {
-      const r = await testAiConfig(cfg)
-      saveAiConfig(cfg)
-      setStatus({ ok: true, text: `Connected ✓ (model: ${r.model})` })
-    } catch (e) {
-      setStatus({ ok: false, text: e instanceof Error ? e.message : 'Connection failed' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <>
-      <section className="card">
-        <p className="small">
-          Snap a photo of your food and get a calorie and macro estimate tuned for Singapore hawker food. It runs on Google
-          Gemini's free tier through your own small Cloudflare server, so it costs nothing.
-        </p>
-        <label className="field">
-          <span>Server URL</span>
-          <input
-            value={endpoint}
-            onChange={(e) => setEndpoint(e.target.value)}
-            placeholder="https://calorie-tracker-ai.<you>.workers.dev"
-            inputMode="url"
-            autoCapitalize="off"
-            autoCorrect="off"
-          />
-        </label>
-        <label className="field">
-          <span>Access code</span>
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="The APP_TOKEN you set on the server"
-            autoCapitalize="off"
-            autoCorrect="off"
-          />
-        </label>
-        {status && <p className={status.ok ? 'hint ok' : 'hint warn'}>{status.text}</p>}
-        <div className="row gap">
-          {existing && (
-            <button
-              className="btn ghost"
-              onClick={() => {
-                saveAiConfig(null)
-                setEndpoint('')
-                setToken('')
-                setStatus(null)
-                toast('AI food scan disconnected')
-              }}
-            >
-              Disconnect
-            </button>
-          )}
-          <button className="btn primary grow" disabled={busy || !endpoint || !token} onClick={save}>
-            {busy ? 'Testing…' : 'Save & test connection'}
-          </button>
-        </div>
-      </section>
-      <section className="card">
-        <h3>How to set it up</h3>
-        <ol className="steps small">
-          <li>
-            Get a free Gemini API key at <b>aistudio.google.com/apikey</b>.
-          </li>
-          <li>Create a free Cloudflare account at <b>dash.cloudflare.com</b>.</li>
-          <li>
-            On your computer, follow <b>worker/README.md</b> in the GitHub repo. It deploys the server with a few terminal commands.
-          </li>
-          <li>Paste the server URL and your access code above.</li>
-        </ol>
-        <p className="muted small">
-          On Gemini's free tier, Google may use your photos to improve its products, so don't send anything private. The access
-          code and URL are stored only on this device and aren't included in backups.
-        </p>
-      </section>
-    </>
   )
 }
 

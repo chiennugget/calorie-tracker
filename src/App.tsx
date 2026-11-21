@@ -137,7 +137,7 @@ export default function App() {
             <span className="action-title">Log food</span>
             <span className="action-sub">Search hawker food, meals or quick add</span>
           </button>
-          <button className="action-pill-btn" aria-label="Scan food" onClick={() => openAdd(slotForNow(), 'scan')}>
+          <button className="action-pill-btn" aria-label="Scan barcode" onClick={() => openAdd(slotForNow(), 'scan')}>
             <IconScan size={24} />
           </button>
         </div>
@@ -159,11 +159,6 @@ export default function App() {
         initialSlot={addSlot ?? lastSlot}
         initialTab={addTab}
         data={data}
-        onOpenAiSettings={() => {
-          setAddSlot(null)
-          setTab('settings')
-          openSettingsPage('ai')
-        }}
       />
       <Toaster />
     </div>

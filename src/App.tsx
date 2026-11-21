@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { AddFoodSheet, type Tab as AddTab } from './components/AddFoodSheet'
 import { IconChart, IconChevronLeft, IconHome, IconScale, IconScan, IconUser } from './components/Icons'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { startCloud } from './cloud/cloud'
 import { Toaster, toast } from './components/toast'
 import { formatDayLabel, fromDateKey, today } from './lib/date'
 import { loggingStreak } from './lib/nutrition'
@@ -48,6 +49,7 @@ export default function App() {
       toast("Couldn't save. Storage may be full or blocked (private browsing?). Download a backup from Settings."),
     )
     navigator.storage?.persist?.().catch(() => {})
+    startCloud()
   }, [])
 
   // Let the phone's back gesture / browser back close a settings sub-page.
@@ -140,6 +142,10 @@ export default function App() {
             onOpenCalculator={() => {
               setTab('settings')
               openSettingsPage('calculator')
+            }}
+            onOpenCloud={() => {
+              setTab('settings')
+              openSettingsPage('cloud')
             }}
           />}
         {tab === 'progress' && <Progress data={data} />}

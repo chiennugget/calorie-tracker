@@ -31,11 +31,18 @@ function WeekStrip({ date, setDate, data }: { date: DateKey; setDate: (d: DateKe
               key={d}
               className={`week-day ${d === date ? 'selected' : ''} ${d === t ? 'today' : ''} ${d > t ? 'future' : ''}`}
               onClick={() => setDate(d)}
-              aria-label={formatDayLabel(d)}
               aria-current={d === date ? 'date' : undefined}
             >
-              <span className="wd">{dt.toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
-              <span className="dn">{dt.getDate()}</span>
+              <span className="sr-only">
+                {formatDayLabel(d)}
+                {logged.has(d) ? ', logged' : ''}
+              </span>
+              <span className="wd" aria-hidden>
+                {dt.toLocaleDateString(undefined, { weekday: 'narrow' })}
+              </span>
+              <span className="dn" aria-hidden>
+                {dt.getDate()}
+              </span>
               <span className={`dot ${logged.has(d) ? 'on' : ''}`} />
             </button>
           )
@@ -192,7 +199,7 @@ export function Diary({
               </button>
               {list.length > 0 && (
                 <button className="pill-btn ghost" onClick={() => setCopying(slot)} aria-label={`Copy ${SLOT_LABELS[slot]} to another day`}>
-                  <IconCopy size={16} /> Copy to…
+                  <IconCopy size={16} /> Copy
                 </button>
               )}
               {canCopy && (

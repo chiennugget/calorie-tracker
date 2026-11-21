@@ -348,8 +348,8 @@ function DataCard({ data }: { data: AppData }) {
               store.replaceAll(parsed)
               toast('Backup restored')
             }
-          } catch {
-            alert('That file is not a valid Calorie Tracker backup.')
+          } catch (err) {
+            toast(err instanceof Error && /newer/.test(err.message) ? err.message : "That file isn't a valid Calorie Tracker backup.")
           }
         }}
       />

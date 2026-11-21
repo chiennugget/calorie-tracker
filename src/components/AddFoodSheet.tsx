@@ -88,7 +88,7 @@ export function AddFoodSheet({
           { value: 'meals', label: 'My meals' },
           { value: 'recent', label: 'Recent' },
           { value: 'search', label: 'Search' },
-          { value: 'scan', label: 'Barcode' },
+          { value: 'scan', label: 'Scan' },
         ]}
       />
       <div className="tab-body">

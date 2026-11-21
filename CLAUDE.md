@@ -10,22 +10,20 @@ A free, private calorie/macro/weight tracker. It's a React + TypeScript PWA buil
 
 ```bash
 npm run dev                 # http://localhost:5173/calorie-tracker/
-npm test                    # vitest run (app + worker tests)
+npm test                    # vitest run (unit tests in src/**/*.test.ts)
+npm run e2e                 # Playwright: builds, serves on :4173, runs e2e/ on iPhone 13 + desktop Chromium with axe
 npx vitest run src/lib/sgFoods.test.ts        # one file
 npx vitest run -t "tolerates typos"            # one test by name
 npm run build               # tsc -b && vite build (typecheck is part of the build)
 npm run lint                # oxlint
-npx tsc -p worker/tsconfig.json                # typecheck the Cloudflare worker (not covered by tsc -b)
 ```
 
-Pushing to `main` runs `.github/workflows/deploy.yml`, which tests, builds and deploys to Pages. The Vite `base` is `/calorie-tracker/`; override it with the `BASE_PATH` env var.
-
-The `worker/` folder is deployed separately by the user from their own machine with `npx wrangler deploy` (see `worker/README.md`). CI never deploys it.
+Pushing to `main` runs `.github/workflows/deploy.yml`, which lints, unit-tests, builds, runs the E2E suite and deploys to Pages. PRs run the same checks without deploying. The Vite `base` is `/calorie-tracker/`; override it with the `BASE_PATH` env var.
 
 ## Architecture
 
 **Two layers:**
-- `src/lib/` is framework-agnostic TypeScript with no DOM or React imports, except `useStore.ts` and `aiScan.ts`. Keep it portable for the React Native port.
+- `src/lib/` is framework-agnostic TypeScript with no DOM or React imports, except `useStore.ts` and `backup.ts` (file downloads). Keep it portable for the React Native port.
 - `src/components/` and `src/screens/` hold the web UI.
 
 **State:**
@@ -38,7 +36,10 @@ The `worker/` folder is deployed separately by the user from their own machine w
 - `FoodEntry.nutrients` are **per serving**. Totals are `nutrients × servings`, so use `entryTotal` / `sumEntries` in `lib/nutrition.ts`.
 - There's one `WeighIn` per date; logging again replaces it.
 - Exercise calories are shown but deliberately **not** added to the calorie budget: `daySummary().remaining = goal − food`.
-- `AppData.version` gates backup import in `storage.parseData`, which also normalises missing fields. Update it when the schema changes.
+- `AppData.version` (`DATA_VERSION`, currently 2) gates backup import in `storage.parseData`. That function migrates older versions step by step in `migrate()`, validates row by row (bad rows are dropped, numbers coerced) and refuses newer versions. When the schema changes, bump `DATA_VERSION`, add a migration step and add a test in `storage.test.ts`.
+- `AppData.meta` holds housekeeping (`onboarded`, `lastBackupAt`, `backupReminderDismissedAt`), not diary data.
+- `Store` reports failed saves through `setSaveErrorHandler` (App shows a toast). `useStore.ts` reloads on the `storage` event so tabs stay in sync.
+- `lib/insights.ts` holds derived logic: `weekBudget`, `estimateTdee` (adaptive maintenance), `adaptiveCalorieGoal`, `projectGoalDate`, `recentFoods`, `usualFoods`, `recentMeals` and `shouldRemindBackup`.
 - Dates are local `YYYY-MM-DD` strings. Use the `lib/date.ts` helpers, never `toISOString()`, which is UTC.
 
 **Food sources, all ending in `store.addEntry`:**
@@ -46,17 +47,10 @@ The `worker/` folder is deployed separately by the user from their own machine w
 - `lib/sgFoods.ts` is an offline Singapore hawker database: about 90 dishes with `oilG`, portion factors and add-ons.
   - `computeDish` applies the portion, oil and add-on adjustments.
   - `searchSgDishes` does token search with a typo, initials and subsequence fallback.
-  - This file is **also imported by the worker**, so keep it free of DOM code.
 - `lib/foodApi.ts` handles Open Food Facts search and barcode lookup.
   - The legacy `/cgi/search.pl` is the only OFF search that allows browser CORS calls, and its rate-limit 503s have no CORS headers, so it retries once.
-  - When the AI worker is configured, search goes through the worker's `/search` proxy instead, which uses `search.openfoodfacts.org`.
 
-**Optional AI worker (`worker/`):**
-- A Cloudflare Worker that holds the Gemini key as a secret.
-- Endpoints: `/health`, `POST /estimate` and `GET /search`, all authenticated by an `X-App-Token` header plus an `ALLOWED_ORIGINS` check.
-- `estimate` sends the photo with a Singapore-hawker system prompt and the dish list from `sgFoods`. It asks for schema-constrained JSON and runs the result through `sanitiseEstimate`.
-- On 503, 429 or 404 it retries and then falls back from `GEMINI_MODEL` to `GEMINI_FALLBACK_MODEL`.
-- On the app side, `lib/aiScan.ts` keeps its config in a **separate localStorage key**, so it stays out of backups. It downsizes photos to a 1024px JPEG before upload. `components/AiScan.tsx` shows a review step: matched dishes are recomputed from `sgFoods` with editable portion and oil.
+(An AI photo worker used to live in `worker/`; it was removed because it wasn't being used.)
 
 **UI conventions:**
 - All styling lives in one file, `src/index.css`, with design tokens on `:root` and a dark-mode override. There's no CSS framework.
@@ -67,12 +61,17 @@ The `worker/` folder is deployed separately by the user from their own machine w
 - Settings sub-pages are driven from `App.tsx` (`settingsPage` state plus `history.pushState`), so the phone's back gesture works.
 - Progress and Weight are lazy-loaded because recharts is heavy.
 - Inputs stay at 16px or larger, otherwise iOS zooms in on focus.
+- Text colours must pass WCAG AA (4.5:1) on cards *and* meal pastels. Use `--protein-ink`, `--carbs-ink` and `--fat-ink` for macro text; the plain `--protein` etc. are for chart fills. The axe E2E checks enforce this in light and dark mode.
+- If an `aria-label` is used, it must contain the visible text (WCAG 2.5.3). Prefer `.sr-only` text for extra context.
 
 ## Testing notes
 
-- Tests run in a Node environment (vitest), not a DOM. Unit-test the pure `lib/` and `worker/` logic.
-- The worker tests stub `fetch`. `estimate()` takes `fetchImpl` and `delayMs` parameters so tests can avoid real network calls and sleeps.
-- UI changes are checked by hand with the preinstalled Playwright Chromium against `npx vite preview --port 4173`, using phone viewports (`devices['iPhone 13']`).
+- Unit tests run in a Node environment (vitest), not a DOM. Unit-test the pure `lib/` logic: `core.test.ts`, `insights.test.ts`, `storage.test.ts` and `sgFoods.test.ts`.
+- E2E (`e2e/`, Playwright) runs against `vite preview` of the production build. It uses the `mobile` project (iPhone 13 viewport on Chromium) and the `desktop` project (smoke and a11y only).
+  - Seed state with `seed(page, seedData({...}))` from `e2e/fixtures.ts`. Pass `null` for a fresh install.
+  - Open Food Facts is mocked in every test; tests never hit the real API.
+  - The service worker is blocked, and a11y tests emulate `reducedMotion: 'reduce'` so axe doesn't read mid-animation colours.
+- `@playwright/test` is pinned to the preinstalled browser's version (1.63.0), and `playwright-core` is pinned via `overrides`. Upgrade them together.
 
 ## Design references
 

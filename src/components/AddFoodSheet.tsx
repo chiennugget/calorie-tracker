@@ -9,6 +9,10 @@ import { FoodPicker, type PickedFood } from './FoodPicker'
 import { MealForm } from './MealForm'
 import { toast } from './toast'
 import { MacroLine, NumberField, Segmented, Sheet, kcal, toNum } from './ui'
+import { AiScan } from './AiScan'
+import { loadAiConfig } from '../lib/aiScan'
+import { HawkerPicker } from './HawkerPicker'
+import { POPULAR_SG_DISHES, searchSgDishes, type SgDish } from '../lib/sgFoods'
 
 type Tab = 'quick' | 'meals' | 'recent' | 'search' | 'scan'
 
@@ -18,12 +22,14 @@ export function AddFoodSheet({
   date,
   initialSlot,
   data,
+  onOpenAiSettings,
 }: {
   open: boolean
   onClose: () => void
   date: DateKey
   initialSlot: MealSlot
   data: AppData
+  onOpenAiSettings?: () => void
 }) {
   const [slot, setSlot] = useState<MealSlot>(initialSlot)
   const [tab, setTab] = useState<Tab>(data.savedMeals.length ? 'meals' : 'quick')
@@ -98,7 +104,16 @@ export function AddFoodSheet({
         {tab === 'meals' && <SavedMealsTab meals={data.savedMeals} onAdd={add} onGoQuick={() => setTab('quick')} />}
         {tab === 'recent' && <RecentTab data={data} onAdd={add} />}
         {tab === 'search' && <SearchTab onAdd={(f) => add({ ...f, source: 'food' })} />}
-        {tab === 'scan' && <ScanTab onAdd={(f) => add({ ...f, source: 'food' })} />}
+        {tab === 'scan' && (
+          <ScanTab
+            onAdd={(items, fromAi) => {
+              items.forEach((f) => add({ ...f, source: 'food' }))
+              if (items.length > 1) toast(`Added ${items.length} items to ${SLOT_LABELS[slot]}`)
+              if (fromAi) onClose()
+            }}
+            onOpenAiSettings={onOpenAiSettings}
+          />
+        )}
       </div>
     </Sheet>
   )
@@ -247,60 +262,145 @@ function RecentTab({ data, onAdd }: { data: AppData; onAdd: AddFn }) {
   )
 }
 
+function SgDishRow({ dish, onPick }: { dish: SgDish; onPick: () => void }) {
+  return (
+    <li className="list-item">
+      <button className="plain text-left full row between" onClick={onPick}>
+        <span>
+          <span className="item-name">{dish.name}</span>
+          <span className="muted small">
+            {dish.serving} · {kcal(dish.n.calories)} kcal{dish.oilG >= 15 ? ' · oily' : ''}
+          </span>
+        </span>
+        <span className="chev" aria-hidden>
+          ›
+        </span>
+      </button>
+    </li>
+  )
+}
+
 function SearchTab({ onAdd }: { onAdd: (f: PickedFood) => void }) {
   const [q, setQ] = useState('')
   const [results, setResults] = useState<FoodProduct[] | null>(null)
+  const [searchedFor, setSearchedFor] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [picked, setPicked] = useState<FoodProduct | null>(null)
+  const [dish, setDish] = useState<SgDish | null>(null)
+  const sg = useMemo(() => searchSgDishes(q, 8), [q])
 
   const run = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!q.trim()) return
+    const term = q.trim()
+    if (!term) return
     setLoading(true)
     setError(null)
     try {
-      setResults(await searchFoods(q.trim()))
+      setResults(await searchFoods(term, undefined, loadAiConfig()))
+      setSearchedFor(term)
     } catch {
-      setError('Search failed. Check your connection and try again.')
+      setError("Packaged-food search isn't responding right now. Hawker dishes above still work, or try again in a minute.")
     } finally {
       setLoading(false)
     }
   }
 
+  if (dish) return <HawkerPicker dish={dish} onBack={() => setDish(null)} onAdd={(f) => { onAdd(f); setDish(null) }} />
   if (picked) return <FoodPicker product={picked} onBack={() => setPicked(null)} onAdd={(f) => { onAdd(f); setPicked(null) }} />
 
   return (
     <div className="stack">
       <form className="row gap" onSubmit={run}>
-        <input className="grow" type="search" placeholder="Search foods (e.g. oat milk)" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
-        <button className="btn primary" disabled={loading}>
-          {loading ? '…' : 'Search'}
+        <input
+          className="grow"
+          type="search"
+          placeholder="e.g. chicken rice, milo, oat milk"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value)
+            if (results && e.target.value.trim() !== searchedFor) setResults(null)
+          }}
+          enterKeyHint="search"
+        />
+        <button className="btn primary" disabled={loading || !q.trim()}>
+          {loading ? <span className="spinner small" aria-label="Searching" /> : 'Search'}
         </button>
       </form>
+
+      {!q.trim() && (
+        <section>
+          <h4 className="section-label">Popular hawker dishes</h4>
+          <ul className="list">
+            {POPULAR_SG_DISHES.map((d) => (
+              <SgDishRow key={d.id} dish={d} onPick={() => setDish(d)} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {sg.length > 0 && (
+        <section>
+          <h4 className="section-label">🇸🇬 Hawker & kopitiam</h4>
+          <ul className="list">
+            {sg.map((d) => (
+              <SgDishRow key={d.id} dish={d} onPick={() => setDish(d)} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {q.trim() && !results && !loading && !error && (
+        <p className="muted small">Press Search to also look up packaged foods (Open Food Facts).</p>
+      )}
       {error && <p className="hint warn">{error}</p>}
-      {results && !results.length && <p className="muted">No results. Try a different term, or use Quick add.</p>}
+
       {results && (
-        <ul className="list">
-          {results.map((p) => (
-            <li key={p.code} className="list-item">
-              <button className="plain text-left full" onClick={() => setPicked(p)}>
-                <div className="item-name">{p.name}</div>
-                <div className="muted small">
-                  {p.brand ? `${p.brand} · ` : ''}
-                  {kcal(p.per100g.calories)} kcal / 100 g
-                  {p.perServing && p.servingSize ? ` · ${kcal(p.perServing.calories)} kcal / ${p.servingSize}` : ''}
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <section>
+          <h4 className="section-label">Packaged foods</h4>
+          {!results.length && <p className="muted small">No packaged foods found. Try another term, or use Quick add.</p>}
+          <ul className="list">
+            {results.map((p) => (
+              <li key={p.code} className="list-item">
+                <button className="plain text-left full" onClick={() => setPicked(p)}>
+                  <div className="item-name">{p.name}</div>
+                  <div className="muted small">
+                    {p.brand ? `${p.brand} · ` : ''}
+                    {kcal(p.per100g.calories)} kcal / 100 g
+                    {p.perServing && p.servingSize ? ` · ${kcal(p.perServing.calories)} kcal / ${p.servingSize}` : ''}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   )
 }
 
-function ScanTab({ onAdd }: { onAdd: (f: PickedFood) => void }) {
+function ScanTab({ onAdd, onOpenAiSettings }: { onAdd: (items: PickedFood[], fromAi?: boolean) => void; onOpenAiSettings?: () => void }) {
+  const [mode, setMode] = useState<'ai' | 'barcode'>('ai')
+  return (
+    <div className="stack">
+      <Segmented
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: 'ai', label: '✨ AI photo' },
+          { value: 'barcode', label: 'Barcode' },
+        ]}
+      />
+      {mode === 'ai' ? (
+        <AiScan onAdd={(items) => onAdd(items, true)} onOpenSettings={onOpenAiSettings} />
+      ) : (
+        <BarcodeTab onAdd={(f) => onAdd([f])} />
+      )}
+    </div>
+  )
+}
+
+function BarcodeTab({ onAdd }: { onAdd: (f: PickedFood) => void }) {
   const [code, setCode] = useState<string | null>(null)
   const [product, setProduct] = useState<FoodProduct | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'notfound' | 'error'>('idle')

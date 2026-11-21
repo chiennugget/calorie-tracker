@@ -115,7 +115,18 @@ export default function App() {
         ))}
       </nav>
 
-      <AddFoodSheet open={addSlot !== null} onClose={() => setAddSlot(null)} date={date} initialSlot={addSlot ?? lastSlot} data={data} />
+      <AddFoodSheet
+        open={addSlot !== null}
+        onClose={() => setAddSlot(null)}
+        date={date}
+        initialSlot={addSlot ?? lastSlot}
+        data={data}
+        onOpenAiSettings={() => {
+          setAddSlot(null)
+          setTab('settings')
+          openSettingsPage('ai')
+        }}
+      />
       <Toaster />
     </div>
   )

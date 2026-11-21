@@ -6,6 +6,7 @@ import type { Nutrients } from './types'
  */
 
 const BASE = 'https://world.openfoodfacts.org'
+const TIMEOUT_MS = 12000
 const FIELDS = 'code,product_name,brands,nutriments,serving_size,serving_quantity'
 
 export interface FoodProduct {
@@ -23,7 +24,7 @@ type Nutriments = Record<string, number | string | undefined>
 interface OffProduct {
   code?: string
   product_name?: string
-  brands?: string
+  brands?: string | string[]
   nutriments?: Nutriments
   serving_size?: string
   serving_quantity?: number | string
@@ -69,7 +70,7 @@ export function parseProduct(p: OffProduct): FoodProduct | null {
   return {
     code: p.code,
     name,
-    brand: p.brands?.split(',')[0]?.trim() || undefined,
+    brand: (Array.isArray(p.brands) ? p.brands[0] : p.brands?.split(',')[0])?.trim() || undefined,
     per100g,
     perServing,
     servingSize: p.serving_size || undefined,
@@ -77,18 +78,71 @@ export function parseProduct(p: OffProduct): FoodProduct | null {
   }
 }
 
-export async function searchFoods(query: string, signal?: AbortSignal): Promise<FoodProduct[]> {
-  const url =
-    `${BASE}/cgi/search.pl?search_simple=1&action=process&json=1&page_size=25` +
-    `&fields=${FIELDS}&search_terms=${encodeURIComponent(query)}`
-  const res = await fetch(url, { signal })
-  if (!res.ok) throw new Error(`Search failed (${res.status})`)
-  const body = (await res.json()) as { products?: OffProduct[] }
-  return (body.products ?? []).map(parseProduct).filter((p): p is FoodProduct => p !== null)
+/** Combines the caller's abort signal with a timeout. */
+function withTimeout(signal?: AbortSignal): AbortSignal {
+  // AbortSignal.timeout/any need Safari 16/17.4+; fall back gracefully on older devices.
+  if (typeof AbortSignal.timeout !== 'function') return signal ?? new AbortController().signal
+  const t = AbortSignal.timeout(TIMEOUT_MS)
+  if (!signal) return t
+  return typeof AbortSignal.any === 'function' ? AbortSignal.any([signal, t]) : signal
+}
+
+function dedupe(products: FoodProduct[]): FoodProduct[] {
+  const seen = new Set<string>()
+  return products.filter((p) => (seen.has(p.code) ? false : (seen.add(p.code), true)))
+}
+
+/** Optional server-side proxy (the AI worker) — avoids browser CORS limits on Open Food Facts. */
+export interface SearchProxy {
+  endpoint: string
+  token: string
+}
+
+const parseList = (list: OffProduct[] | undefined) => dedupe((list ?? []).map(parseProduct).filter((p): p is FoodProduct => p !== null))
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+async function searchViaProxy(query: string, proxy: SearchProxy, signal?: AbortSignal): Promise<FoodProduct[]> {
+  const res = await fetch(`${proxy.endpoint.replace(/\/+$/, '')}/search?q=${encodeURIComponent(query)}`, {
+    headers: { 'X-App-Token': proxy.token },
+    signal: withTimeout(signal),
+  })
+  if (!res.ok) throw new Error(`Proxy search failed (${res.status})`)
+  return parseList(((await res.json()) as { hits?: OffProduct[] }).hits)
+}
+
+/**
+ * The legacy endpoint is the only Open Food Facts search that allows browser (CORS) calls.
+ * It rate-limits with 503s that carry no CORS headers (so they look like network errors);
+ * one delayed retry usually gets through.
+ */
+async function searchLegacy(query: string, signal?: AbortSignal): Promise<FoodProduct[]> {
+  const url = `${BASE}/cgi/search.pl?search_simple=1&action=process&json=1&page_size=25&fields=${FIELDS}&search_terms=${encodeURIComponent(query)}`
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url, { signal: withTimeout(signal) })
+      if (!res.ok) throw new Error(`Search failed (${res.status})`)
+      return parseList(((await res.json()) as { products?: OffProduct[] }).products)
+    } catch (err) {
+      if (signal?.aborted || attempt >= 1) throw err
+      await sleep(1500)
+    }
+  }
+}
+
+/** Searches packaged foods, via the worker when available, else directly. */
+export async function searchFoods(query: string, signal?: AbortSignal, proxy?: SearchProxy | null): Promise<FoodProduct[]> {
+  if (proxy) {
+    try {
+      return await searchViaProxy(query, proxy, signal)
+    } catch (err) {
+      if (signal?.aborted) throw err
+    }
+  }
+  return searchLegacy(query, signal)
 }
 
 export async function lookupBarcode(code: string, signal?: AbortSignal): Promise<FoodProduct | null> {
-  const res = await fetch(`${BASE}/api/v2/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`, { signal })
+  const res = await fetch(`${BASE}/api/v2/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`, { signal: withTimeout(signal) })
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`Lookup failed (${res.status})`)
   const body = (await res.json()) as { status?: number; product?: OffProduct }

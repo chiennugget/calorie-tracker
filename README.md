@@ -10,7 +10,9 @@ A free, private calorie and macro tracker with the everyday MyFitnessPal feature
 - **Quick add**: log one-off meals (like dinner out) with a custom name, calories, protein, carbs and fat. If you leave calories blank, they're worked out from the macros, and you get a warning when the numbers don't add up.
 - **My meals**: save meals and add them again in one tap. You can sort by most used, most recent or A–Z.
 - **Recent foods**: re-log anything you've eaten before.
-- **Food search**: search the free [Open Food Facts](https://world.openfoodfacts.org) database and log by grams or by servings.
+- **Singapore hawker database**: about 90 hawker and kopitiam dishes (chicken rice, char kway teow, laksa, economy rice, prata, kopi and more) with **portion**, **oil level** and **add-on** adjusters. Works offline.
+- **Food search**: hawker dishes appear as you type. Packaged foods come from the free [Open Food Facts](https://world.openfoodfacts.org) database, logged by grams or by servings.
+- **AI photo estimate** (optional, free): snap your food and Google Gemini estimates each item, tuned for Singapore hawker food. You review and adjust before anything is added. It runs through your own free Cloudflare Worker; see [`worker/README.md`](worker/README.md).
 - **Barcode scanner**: uses your phone camera. It uses the native BarcodeDetector where available and falls back to ZXing. You can also type a barcode by hand.
 - Breakfast, lunch, dinner and snack sections, with **copy yesterday's meal**.
 - Edit an entry's servings or meal, delete it with undo, or save any entry to My meals.
@@ -54,6 +56,7 @@ src/
   lib/          # framework-agnostic core (types, store, nutrition maths, storage, food API)
   components/   # shared UI: add-food sheet, meal form, barcode scanner, etc.
   screens/      # Diary, Progress, Weight, Settings
+worker/         # optional Cloudflare Worker: AI photo estimates + food-search proxy
 ```
 
 ## Roadmap: native app

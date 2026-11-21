@@ -1,0 +1,13 @@
+name = "calorie-tracker-ai"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+[vars]
+# Only these sites may call the worker. Add http://localhost:5173 for local dev if needed.
+ALLOWED_ORIGINS = "https://chiennugget.github.io"
+# Rolling alias for Google's current Flash model (free tier). Change to pin a version.
+GEMINI_MODEL = "gemini-flash-latest"
+
+# Secrets (set with `npx wrangler secret put <NAME>`, never commit them):
+#   GEMINI_API_KEY  – from https://aistudio.google.com/apikey
+#   APP_TOKEN       – any long random string; you also paste it into the app's settings

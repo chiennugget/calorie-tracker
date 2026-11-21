@@ -70,7 +70,7 @@ export function AddFoodSheet({
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={`Add to ${formatDayLabel(date)}`}>
+    <Sheet tall open={open} onClose={onClose} title={`Add to ${formatDayLabel(date)}`}>
       <div className="slot-pick">
         {MEAL_SLOTS.map((s) => (
           <button key={s} className={`chip ${s === slot ? 'active' : ''}`} onClick={() => setSlot(s)}>

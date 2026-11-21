@@ -203,11 +203,14 @@ input[type='checkbox'] { -webkit-appearance: auto; appearance: auto; width: 20px
 /* Sheet */
 .sheet { border: none; padding: 0; margin: auto auto 0; width: 100%; max-width: 640px; max-height: 92dvh; border-radius: 20px 20px 0 0; background: var(--card); color: var(--text); }
 .sheet::backdrop { background: rgb(0 0 0 / 0.45); }
+.sheet { overscroll-behavior: contain; }
 @media (min-width: 700px) { .sheet { margin: auto; border-radius: 20px; } }
 .sheet-inner { display: flex; flex-direction: column; max-height: 92dvh; }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 8px; }
 .sheet-head h2 { font-size: 1.15rem; }
-.sheet-body { overflow-y: auto; padding: 4px 16px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
+.sheet.tall { height: 92dvh; }
+.sheet.tall .sheet-inner { height: 100%; }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 4px 16px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
 .slot-pick { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 .tab-body { min-height: 260px; }
 .back { align-self: flex-start; }

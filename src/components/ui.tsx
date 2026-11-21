@@ -1,16 +1,44 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import type { Nutrients } from '../lib/types'
 
+/**
+ * Locks page scrolling while any sheet is open. iOS Safari ignores
+ * `overflow: hidden` on <body>, so the body is pinned with position: fixed
+ * and the scroll position is restored afterwards.
+ */
+let lockCount = 0
+let savedScrollY = 0
+function lockScroll() {
+  if (lockCount++ > 0) return
+  savedScrollY = window.scrollY
+  const b = document.body.style
+  b.position = 'fixed'
+  b.top = `-${savedScrollY}px`
+  b.left = '0'
+  b.right = '0'
+  b.overflow = 'hidden'
+}
+function unlockScroll() {
+  if (--lockCount > 0) return
+  lockCount = 0
+  const b = document.body.style
+  b.position = b.top = b.left = b.right = b.overflow = ''
+  window.scrollTo(0, savedScrollY)
+}
+
 export function Sheet({
   open,
   onClose,
   title,
   children,
+  tall = false,
 }: {
   open: boolean
   onClose: () => void
   title: string
   children: ReactNode
+  /** Fixed near-full height, so content (e.g. a search box) never jumps as results change. */
+  tall?: boolean
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
@@ -19,10 +47,15 @@ export function Sheet({
     if (open && !d.open) d.showModal()
     if (!open && d.open) d.close()
   }, [open])
+  useEffect(() => {
+    if (!open) return
+    lockScroll()
+    return unlockScroll
+  }, [open])
   return (
     <dialog
       ref={ref}
-      className="sheet"
+      className={`sheet ${tall ? 'tall' : ''}`}
       onClose={onClose}
       onClick={(e) => {
         if (e.target === ref.current) onClose()

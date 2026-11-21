@@ -37,4 +37,11 @@ describe('sg hawker database', () => {
     expect(searchSgDishes('prata').length).toBeGreaterThanOrEqual(2)
     expect(searchSgDishes('zzzz')).toEqual([])
   })
+
+  it('tolerates typos and abbreviations', () => {
+    expect(searchSgDishes('laska')[0].id).toBe('laksa')
+    expect(searchSgDishes('char kway teaw')[0].id).toBe('char_kway_teow')
+    expect(searchSgDishes('chc').length).toBeGreaterThan(0)
+    expect(searchSgDishes('bkm').map((d) => d.id)).toContain('bak_chor_mee')
+  })
 })

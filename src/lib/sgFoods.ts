@@ -288,6 +288,52 @@ export function searchSgDishes(query: string, limit = 12): SgDish[] {
     }
     if (best > 0) scored.push({ d, s: best })
   }
+  if (!scored.length) return fuzzySgDishes(q, limit)
+  return scored.sort((a, b) => b.s - a.s).slice(0, limit).map((x) => x.d)
+}
+
+/** Edit distance where a swap of two adjacent letters counts as one typo (optimal string alignment). */
+function editDistance(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 3) return 99
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)])
+  for (let j = 0; j <= b.length; j++) d[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1)
+    }
+  }
+  return d[a.length][b.length]
+}
+
+/**
+ * Typo-tolerant fallback, used only when nothing matches exactly:
+ *  - initials / abbreviations ("cr" → chicken rice, "chc" → char siew/chicken…),
+ *  - letters in order ("chknrice"),
+ *  - words within 1–2 typos ("laska" → laksa, "prata" ↔ "parata").
+ */
+function fuzzySgDishes(q: string, limit: number): SgDish[] {
+  const compact = q.replace(/ /g, '')
+  const qWords = q.split(' ')
+  const scored: { d: SgDish; s: number }[] = []
+  for (const d of SG_DISHES) {
+    let best = 0
+    for (const raw of [d.name, ...(d.aliases ?? [])]) {
+      const n = norm(raw)
+      const words = n.split(' ')
+      const initials = words.map((w) => w[0]).join('')
+      if (initials.startsWith(compact) && compact.length >= 2) best = Math.max(best, 3)
+      // every query word is close to some word in the name
+      const typoOk = qWords.every((qw) => qw.length >= 3 && words.some((w) => editDistance(qw, w.slice(0, Math.max(qw.length, 3) + 1)) <= (qw.length >= 6 ? 2 : 1)))
+      if (typoOk) best = Math.max(best, 2.5)
+      // letters appear in order
+      let i = 0
+      for (const ch of n.replace(/ /g, '')) if (ch === compact[i]) i++
+      if (i === compact.length && compact.length >= 3) best = Math.max(best, 1 + compact.length / n.length)
+    }
+    if (best > 0) scored.push({ d, s: best })
+  }
   return scored.sort((a, b) => b.s - a.s).slice(0, limit).map((x) => x.d)
 }
 

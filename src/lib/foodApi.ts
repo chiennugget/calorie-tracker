@@ -92,23 +92,8 @@ function dedupe(products: FoodProduct[]): FoodProduct[] {
   return products.filter((p) => (seen.has(p.code) ? false : (seen.add(p.code), true)))
 }
 
-/** Optional server-side proxy (the AI worker) — avoids browser CORS limits on Open Food Facts. */
-export interface SearchProxy {
-  endpoint: string
-  token: string
-}
-
 const parseList = (list: OffProduct[] | undefined) => dedupe((list ?? []).map(parseProduct).filter((p): p is FoodProduct => p !== null))
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-async function searchViaProxy(query: string, proxy: SearchProxy, signal?: AbortSignal): Promise<FoodProduct[]> {
-  const res = await fetch(`${proxy.endpoint.replace(/\/+$/, '')}/search?q=${encodeURIComponent(query)}`, {
-    headers: { 'X-App-Token': proxy.token },
-    signal: withTimeout(signal),
-  })
-  if (!res.ok) throw new Error(`Proxy search failed (${res.status})`)
-  return parseList(((await res.json()) as { hits?: OffProduct[] }).hits)
-}
 
 /**
  * The legacy endpoint is the only Open Food Facts search that allows browser (CORS) calls.
@@ -129,15 +114,8 @@ async function searchLegacy(query: string, signal?: AbortSignal): Promise<FoodPr
   }
 }
 
-/** Searches packaged foods, via the worker when available, else directly. */
-export async function searchFoods(query: string, signal?: AbortSignal, proxy?: SearchProxy | null): Promise<FoodProduct[]> {
-  if (proxy) {
-    try {
-      return await searchViaProxy(query, proxy, signal)
-    } catch (err) {
-      if (signal?.aborted) throw err
-    }
-  }
+/** Searches packaged foods on Open Food Facts. */
+export function searchFoods(query: string, signal?: AbortSignal): Promise<FoodProduct[]> {
   return searchLegacy(query, signal)
 }
 

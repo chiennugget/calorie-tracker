@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { toast } from '../components/toast'
 import { NumberField, Segmented, toNum } from '../components/ui'
-import { addDays, formatDayLabel, formatShort, today } from '../lib/date'
+import { addDays, formatDayLabel, formatShort, fromDateKey, today } from '../lib/date'
 import { trendWeights } from '../lib/nutrition'
+import { projectGoalDate } from '../lib/insights'
 import { displayWeight, inputWeightToKg } from '../lib/units'
 import { store } from '../lib/useStore'
 import type { AppData } from '../lib/types'
@@ -34,6 +35,7 @@ export function Weight({ data }: { data: AppData }) {
   const first = series[0]
   const weekAgo = [...series].reverse().find((p) => p.date <= addDays(latest?.date ?? today(), -7))
   const goalKg = data.settings.profile?.goalWeightKg
+  const projection = useMemo(() => projectGoalDate(data, today()), [data])
 
   const change = (from?: number, to?: number) =>
     from === undefined || to === undefined ? '—' : `${to - from > 0 ? '+' : ''}${displayWeight(to - from, unit)} ${unit}`
@@ -94,6 +96,12 @@ export function Weight({ data }: { data: AppData }) {
               <div>
                 <b>{change(latest.trend, goalKg).replace('+', '')}</b>
                 <span>To goal</span>
+              </div>
+            )}
+            {projection && (
+              <div>
+                <b>{fromDateKey(projection.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</b>
+                <span>Goal ETA</span>
               </div>
             )}
           </div>

@@ -5,19 +5,14 @@ import { MacroLine, NumberField, Ring, Sheet, fmt, kcal, toNum } from '../compon
 import { IconChevronLeft, IconChevronRight, IconCopy, IconDrop, IconPlus, IconRun } from '../components/Icons'
 import { addDays, formatDayLabel, fromDateKey, today } from '../lib/date'
 import { daySummary, entriesFor, entryTotal, sumEntries } from '../lib/nutrition'
+import { shouldRemindBackup, weekBudget, weekOf } from '../lib/insights'
+import { downloadBackup } from '../lib/backup'
 import { displayWater, waterIncrements } from '../lib/units'
 import { store } from '../lib/useStore'
 import type { AppData, DateKey, FoodEntry, MealSlot } from '../lib/types'
 import { MEAL_SLOTS, SLOT_LABELS } from '../lib/types'
 
 const MEAL_EMOJI: Record<MealSlot, string> = { breakfast: '🍳', lunch: '🍜', dinner: '🍛', snacks: '🧋' }
-
-/** Monday-start week containing `d`. */
-function weekOf(d: DateKey): DateKey[] {
-  const day = (fromDateKey(d).getDay() + 6) % 7
-  const start = addDays(d, -day)
-  return Array.from({ length: 7 }, (_, i) => addDays(start, i))
-}
 
 function WeekStrip({ date, setDate, data }: { date: DateKey; setDate: (d: DateKey) => void; data: AppData }) {
   const days = weekOf(date)
@@ -36,11 +31,18 @@ function WeekStrip({ date, setDate, data }: { date: DateKey; setDate: (d: DateKe
               key={d}
               className={`week-day ${d === date ? 'selected' : ''} ${d === t ? 'today' : ''} ${d > t ? 'future' : ''}`}
               onClick={() => setDate(d)}
-              aria-label={formatDayLabel(d)}
               aria-current={d === date ? 'date' : undefined}
             >
-              <span className="wd">{dt.toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
-              <span className="dn">{dt.getDate()}</span>
+              <span className="sr-only">
+                {formatDayLabel(d)}
+                {logged.has(d) ? ', logged' : ''}
+              </span>
+              <span className="wd" aria-hidden>
+                {dt.toLocaleDateString(undefined, { weekday: 'narrow' })}
+              </span>
+              <span className="dn" aria-hidden>
+                {dt.getDate()}
+              </span>
               <span className={`dot ${logged.has(d) ? 'on' : ''}`} />
             </button>
           )
@@ -70,16 +72,22 @@ export function Diary({
   date,
   setDate,
   onAdd,
+  onOpenCalculator,
 }: {
   data: AppData
   date: DateKey
   setDate: (d: DateKey) => void
   onAdd: (slot: MealSlot) => void
+  onOpenCalculator: () => void
 }) {
   const s = daySummary(data, date)
   const g = data.settings.goals
   const [editing, setEditing] = useState<FoodEntry | null>(null)
   const [exerciseOpen, setExerciseOpen] = useState(false)
+  const [copying, setCopying] = useState<MealSlot | null>(null)
+  const week = weekBudget(data, date)
+  const [now] = useState(() => Date.now())
+  const remindBackup = shouldRemindBackup(data, now)
   const over = s.remaining < 0
   const pct = s.goal > 0 ? Math.min(100, Math.round((s.food.calories / s.goal) * 100)) : 0
   const waterPct = g.waterMl > 0 ? Math.min(100, (s.water / g.waterMl) * 100) : 0
@@ -93,6 +101,9 @@ export function Diary({
           Back to today
         </button>
       )}
+
+      {!data.meta.onboarded && !data.entries.length && <WelcomeCard onOpenCalculator={onOpenCalculator} />}
+      {remindBackup && <BackupReminder data={data} />}
 
       <section className={`hero-card ${over ? 'over' : ''}`}>
         <div className="hero-text">
@@ -117,6 +128,25 @@ export function Diary({
         <MacroRing label="Carbs" value={s.food.carbs} goal={g.carbs} cls="c" />
         <MacroRing label="Fat" value={s.food.fat} goal={g.fat} cls="f" />
       </section>
+
+      {week.eaten > 0 && (
+        <section className="card week-card" aria-label="This week">
+          <div className="row between">
+            <h3>This week</h3>
+            <span className={`kcal ${week.remaining < 0 ? 'neg' : ''}`}>
+              {week.remaining < 0 ? `${kcal(-week.remaining)} over` : `${kcal(week.remaining)} left`}
+            </span>
+          </div>
+          <div className={`bar ${week.remaining < 0 ? 'over' : ''}`} role="progressbar" aria-label="Weekly calories" aria-valuemin={0} aria-valuemax={week.budget} aria-valuenow={Math.round(week.eaten)}>
+            <div style={{ width: `${Math.min(100, (week.eaten / Math.max(1, week.budget)) * 100)}%` }} />
+          </div>
+          <p className="muted small">
+            {kcal(week.eaten)} of {kcal(week.budget)} kcal
+            {week.daysLeft > 1 && week.remaining > 0 && <> · about <b>{kcal(week.perDayLeft)}</b>/day for the next {week.daysLeft} days keeps you on track</>}
+            {week.skippedDays > 0 && <> · {week.skippedDays} unlogged {week.skippedDays === 1 ? 'day' : 'days'} left out</>}
+          </p>
+        </section>
+      )}
 
       <h2 className="section-title">Meals</h2>
       {MEAL_SLOTS.map((slot) => {
@@ -167,12 +197,21 @@ export function Diary({
               <button className="pill-btn" onClick={() => onAdd(slot)}>
                 <IconPlus size={18} strokeWidth={2.4} /> Add
               </button>
+              {list.length > 0 && (
+                <button className="pill-btn ghost" onClick={() => setCopying(slot)} aria-label={`Copy ${SLOT_LABELS[slot]} to another day`}>
+                  <IconCopy size={16} /> Copy
+                </button>
+              )}
               {canCopy && (
                 <button
                   className="pill-btn ghost"
                   onClick={() => {
-                    const n = store.copyEntries(addDays(date, -1), date, slot)
-                    toast(`Copied ${n} item${n === 1 ? '' : 's'} from yesterday`)
+                    const copies = store.copyEntries(addDays(date, -1), date, slot)
+                    const n = copies.length
+                    toast(`Copied ${n} item${n === 1 ? '' : 's'} from yesterday`, {
+                      label: 'Undo',
+                      run: () => store.deleteEntries(copies.map((c) => c.id)),
+                    })
                   }}
                 >
                   <IconCopy size={16} /> Copy yesterday
@@ -248,7 +287,108 @@ export function Diary({
 
       <EntryEditor entry={editing} onClose={() => setEditing(null)} />
       <ExerciseSheet open={exerciseOpen} date={date} onClose={() => setExerciseOpen(false)} />
+      <CopyMealSheet from={date} slot={copying} onClose={() => setCopying(null)} />
     </div>
+  )
+}
+
+function WelcomeCard({ onOpenCalculator }: { onOpenCalculator: () => void }) {
+  return (
+    <section className="card welcome-card">
+      <h3>Welcome 👋</h3>
+      <p className="small">
+        Everything stays on this phone, with no account. Start by working out your calorie and protein targets. It takes about 30 seconds.
+      </p>
+      <div className="row gap wrap">
+        <button className="btn primary" onClick={onOpenCalculator}>
+          Set my goals
+        </button>
+        <button className="btn ghost" onClick={() => store.updateMeta({ onboarded: true })}>
+          Use defaults
+        </button>
+      </div>
+      <p className="muted small">Tip: add this page to your home screen to use it like an app, even offline.</p>
+    </section>
+  )
+}
+
+function BackupReminder({ data }: { data: AppData }) {
+  const never = !data.meta.lastBackupAt
+  return (
+    <section className="card notice-card" role="region" aria-label="Backup reminder">
+      <p className="small">
+        <b>💾 {never ? "You haven't backed up yet." : 'Time for a backup.'}</b> Your diary only lives in this browser. Clearing site
+        data or losing your phone would erase it.
+      </p>
+      <div className="row gap">
+        <button className="btn primary" onClick={() => downloadBackup(data)}>
+          Download backup
+        </button>
+        <button className="btn ghost" onClick={() => store.updateMeta({ backupReminderDismissedAt: Date.now() })}>
+          Later
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function CopyMealSheet({ from, slot, onClose }: { from: DateKey; slot: MealSlot | null; onClose: () => void }) {
+  return (
+    <Sheet open={slot !== null} onClose={onClose} title={slot ? `Copy ${SLOT_LABELS[slot]}` : 'Copy meal'}>
+      {slot && <CopyMealBody key={`${from}-${slot}`} from={from} slot={slot} onClose={onClose} />}
+    </Sheet>
+  )
+}
+
+function CopyMealBody({ from, slot, onClose }: { from: DateKey; slot: MealSlot; onClose: () => void }) {
+  const t = today()
+  const [to, setTo] = useState<DateKey>(from === t ? addDays(t, 1) : t)
+  const [toSlot, setToSlot] = useState<MealSlot>(slot)
+  const quick = [
+    { label: 'Today', d: t },
+    { label: 'Tomorrow', d: addDays(t, 1) },
+  ].filter((q) => !(q.d === from && toSlot === slot))
+  return (
+    <form
+      className="stack"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (to === from && toSlot === slot) return
+        const copies = store.copyEntries(from, to, slot, toSlot)
+        onClose()
+        toast(`Copied ${copies.length} item${copies.length === 1 ? '' : 's'} to ${SLOT_LABELS[toSlot]}, ${formatDayLabel(to).toLowerCase()}`, {
+          label: 'Undo',
+          run: () => store.deleteEntries(copies.map((c) => c.id)),
+        })
+      }}
+    >
+      <div className="row gap wrap">
+        {quick.map((q) => (
+          <button type="button" key={q.label} className={`chip ${to === q.d ? 'active' : ''}`} onClick={() => setTo(q.d)}>
+            {q.label}
+          </button>
+        ))}
+      </div>
+      <div className="grid-2">
+        <label className="field">
+          <span>Date</span>
+          <input type="date" value={to} onChange={(e) => e.target.value && setTo(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Meal</span>
+          <select value={toSlot} onChange={(e) => setToSlot(e.target.value as MealSlot)}>
+            {MEAL_SLOTS.map((m) => (
+              <option key={m} value={m}>
+                {SLOT_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <button className="btn primary" disabled={to === from && toSlot === slot}>
+        Copy to {formatDayLabel(to).toLowerCase()}
+      </button>
+    </form>
   )
 }
 

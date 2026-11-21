@@ -6,16 +6,13 @@ import type {
   MealSlot,
   Nutrients,
   SavedMeal,
+  Meta,
   Settings,
   WeighIn,
 } from './types'
 import { emptyData } from './types'
 import type { StorageAdapter } from './storage'
-
-export const uid = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2) + Date.now().toString(36)
+import { uid } from './uid'
 
 type Listener = () => void
 
@@ -27,10 +24,26 @@ export class Store {
   private data: AppData
   private listeners = new Set<Listener>()
   private storage?: StorageAdapter
+  private onSaveError?: (err: unknown) => void
+  /** True while the latest change has not been written to storage. */
+  saveFailed = false
 
   constructor(storage?: StorageAdapter, initial?: AppData) {
     this.storage = storage
     this.data = initial ?? storage?.load() ?? emptyData()
+  }
+
+  /** Called when a change can't be persisted (e.g. storage full or blocked). */
+  setSaveErrorHandler(fn: (err: unknown) => void) {
+    this.onSaveError = fn
+  }
+
+  /** Re-reads storage, e.g. after another tab changed it. */
+  reload() {
+    const fresh = this.storage?.load()
+    if (!fresh) return
+    this.data = fresh
+    this.listeners.forEach((l) => l())
   }
 
   getState = (): AppData => this.data
@@ -44,7 +57,13 @@ export class Store {
 
   private set(updater: (d: AppData) => AppData) {
     this.data = updater(this.data)
-    this.storage?.save(this.data)
+    try {
+      this.storage?.save(this.data)
+      this.saveFailed = false
+    } catch (err) {
+      this.saveFailed = true
+      this.onSaveError?.(err)
+    }
     this.listeners.forEach((l) => l())
   }
 
@@ -72,10 +91,17 @@ export class Store {
     this.set((d) => ({ ...d, entries: d.entries.filter((e) => e.id !== id) }))
   }
 
-  /** Copies all entries from one day/meal to another (MyFitnessPal "copy meal"). */
-  copyEntries(fromDate: DateKey, toDate: DateKey, slot?: MealSlot, toSlot?: MealSlot): number {
-    const src = this.data.entries.filter((e) => e.date === fromDate && (!slot || e.slot === slot))
-    if (!src.length) return 0
+  deleteEntries(ids: string[]) {
+    const drop = new Set(ids)
+    this.set((d) => ({ ...d, entries: d.entries.filter((e) => !drop.has(e.id)) }))
+  }
+
+  /** Copies all entries from one day/meal to another (MyFitnessPal "copy meal"). Returns the new entries. */
+  copyEntries(fromDate: DateKey, toDate: DateKey, slot?: MealSlot, toSlot?: MealSlot): FoodEntry[] {
+    const src = this.data.entries
+      .filter((e) => e.date === fromDate && (!slot || e.slot === slot))
+      .sort((a, b) => a.createdAt - b.createdAt)
+    if (!src.length) return []
     const now = Date.now()
     const copies = src.map((e, i) => ({
       ...e,
@@ -85,7 +111,7 @@ export class Store {
       createdAt: now + i,
     }))
     this.set((d) => ({ ...d, entries: [...d.entries, ...copies] }))
-    return copies.length
+    return copies
   }
 
   // ---------- Saved meals ----------
@@ -146,8 +172,13 @@ export class Store {
     this.set((d) => ({ ...d, settings: { ...d.settings, ...patch } }))
   }
 
+  updateMeta(patch: Partial<Meta>) {
+    this.set((d) => ({ ...d, meta: { ...d.meta, ...patch } }))
+  }
+
+  /** Restores a backup. Restoring counts as being onboarded and as a fresh backup. */
   replaceAll(data: AppData) {
-    this.set(() => data)
+    this.set(() => ({ ...data, meta: { ...data.meta, onboarded: true, lastBackupAt: data.meta.lastBackupAt ?? Date.now() } }))
   }
 
   reset() {

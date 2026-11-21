@@ -1,11 +1,12 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { AddFoodSheet, type Tab as AddTab } from './components/AddFoodSheet'
 import { IconChart, IconChevronLeft, IconHome, IconScale, IconScan, IconUser } from './components/Icons'
-import { Toaster } from './components/toast'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { Toaster, toast } from './components/toast'
 import { formatDayLabel, fromDateKey, today } from './lib/date'
 import { loggingStreak } from './lib/nutrition'
 import type { DateKey, MealSlot } from './lib/types'
-import { useAppData } from './lib/useStore'
+import { store, useAppData } from './lib/useStore'
 import { Diary } from './screens/Diary'
 import { Settings, type SettingsPage } from './screens/Settings'
 
@@ -39,6 +40,15 @@ export default function App() {
   const [addTab, setAddTab] = useState<AddTab | undefined>(undefined)
   const [lastSlot, setLastSlot] = useState<MealSlot>(slotForNow())
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null)
+
+  // Surface storage problems instead of silently losing changes, and ask the
+  // browser not to evict our data under storage pressure (matters on iOS).
+  useEffect(() => {
+    store.setSaveErrorHandler(() =>
+      toast("Couldn't save. Storage may be full or blocked (private browsing?). Download a backup from Settings."),
+    )
+    navigator.storage?.persist?.().catch(() => {})
+  }, [])
 
   // Let the phone's back gesture / browser back close a settings sub-page.
   useEffect(() => {
@@ -119,9 +129,19 @@ export default function App() {
         </div>
       </header>
       <main>
+        <ErrorBoundary key={tab}>
         <Suspense fallback={<div className="screen muted">Loading…</div>}>
         <div className="tab-view" key={tab}>
-        {tab === 'diary' && <Diary data={data} date={date} setDate={setDate} onAdd={openAdd} />}
+        {tab === 'diary' && <Diary
+            data={data}
+            date={date}
+            setDate={setDate}
+            onAdd={openAdd}
+            onOpenCalculator={() => {
+              setTab('settings')
+              openSettingsPage('calculator')
+            }}
+          />}
         {tab === 'progress' && <Progress data={data} />}
         {tab === 'weight' && <Weight data={data} />}
         {tab === 'settings' && (
@@ -129,6 +149,7 @@ export default function App() {
         )}
         </div>
         </Suspense>
+        </ErrorBoundary>
       </main>
 
       {tab === 'diary' && (
@@ -137,7 +158,7 @@ export default function App() {
             <span className="action-title">Log food</span>
             <span className="action-sub">Search hawker food, meals or quick add</span>
           </button>
-          <button className="action-pill-btn" aria-label="Scan food" onClick={() => openAdd(slotForNow(), 'scan')}>
+          <button className="action-pill-btn" aria-label="Scan barcode" onClick={() => openAdd(slotForNow(), 'scan')}>
             <IconScan size={24} />
           </button>
         </div>
@@ -159,11 +180,6 @@ export default function App() {
         initialSlot={addSlot ?? lastSlot}
         initialTab={addTab}
         data={data}
-        onOpenAiSettings={() => {
-          setAddSlot(null)
-          setTab('settings')
-          openSettingsPage('ai')
-        }}
       />
       <Toaster />
     </div>

@@ -16,10 +16,32 @@ or write anything.
 ## 2. Send a code instead of a link
 
 The app signs in with a 6-digit code, because an emailed link opens in Safari
-rather than in the iPhone home-screen app.
+rather than in the iPhone home-screen app. Supabase only lets you edit email
+templates once you're using your own SMTP server, so set one up first. Gmail is
+free and works fine for one person.
 
-1. Go to **Authentication** → **Emails** → **Templates** → **Magic Link**.
-2. Replace the body with something like:
+**a. Gmail app password**
+1. Turn on 2-Step Verification for the Google account at myaccount.google.com → Security.
+2. Go to myaccount.google.com/apppasswords, create one named `Supabase`, and copy the 16 letters.
+
+**b. Supabase SMTP**
+
+Go to **Authentication** → **Emails** → **Set up SMTP** → **Enable custom SMTP**, then fill in:
+
+| Field | Value |
+|---|---|
+| Sender email / Username | your Gmail address |
+| Sender name | Calorie Tracker |
+| Host / Port | `smtp.gmail.com` / `465` |
+| Password | the app password, without spaces |
+
+**c. Template**
+
+Still on **Authentication** → **Emails**, open the **Magic Link** template.
+Do the same for **Confirm signup**, which the very first sign-in may use.
+
+1. Set the subject to `Your Calorie Tracker code`.
+2. In **Source**, replace the body with:
 
    ```html
    <h2>Your Calorie Tracker code</h2>
@@ -27,18 +49,14 @@ rather than in the iPhone home-screen app.
    <p>It expires in an hour. If you didn't ask for it, ignore this email.</p>
    ```
 
-3. Save.
+3. Click **Save changes**.
 
-While you're there, check that **Authentication** → **Sign In / Providers** →
-**Email** is enabled. It is by default.
-
-Supabase's built-in email sender allows only a few emails per hour. That's
-plenty for one person signing in once per device. For more, add your own SMTP
-under **Authentication** → **Emails** → **SMTP Settings**.
+Check that **Authentication** → **Sign In / Providers** → **Email** is enabled.
+It is by default.
 
 ## 3. Add the two values to GitHub
 
-1. In Supabase, go to **Project Settings** → **API Keys** and copy:
+1. In Supabase, click **Connect** in the top bar, or go to **Project Settings** → **API Keys**, and copy:
    - the **Project URL**, e.g. `https://abcdefgh.supabase.co`
    - the **publishable** key (`sb_publishable_…`), or the legacy **anon** key
 2. In GitHub, go to the repo → **Settings** → **Secrets and variables** →

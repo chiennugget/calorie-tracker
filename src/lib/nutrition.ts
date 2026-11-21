@@ -124,11 +124,11 @@ export const ACTIVITY_FACTORS: Record<ActivityLevel, number> = {
 }
 
 export const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
-  sedentary: 'Sedentary (desk job, little exercise)',
-  light: 'Lightly active (1–3 workouts/week)',
-  moderate: 'Moderately active (3–5 workouts/week)',
-  active: 'Very active (6–7 workouts/week)',
-  very_active: 'Extremely active (physical job + training)',
+  sedentary: 'Sedentary · little exercise',
+  light: 'Light · 1–3 workouts/week',
+  moderate: 'Moderate · 3–5 workouts/week',
+  active: 'Very active · 6–7 workouts/week',
+  very_active: 'Athlete · physical job + training',
 }
 
 /** Mifflin–St Jeor basal metabolic rate. */

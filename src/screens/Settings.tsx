@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { MealForm } from '../components/MealForm'
 import { toast } from '../components/toast'
-import { NumberField, Sheet, kcal, toNum } from '../components/ui'
+import { NumberField, Segmented, Sheet, kcal, toNum } from '../components/ui'
 import { today } from '../lib/date'
 import { ACTIVITY_LABELS, bmr, caloriesFromMacros, sortedWeighIns, suggestGoals, tdee } from '../lib/nutrition'
 import { diaryToCsv, parseData, serialiseData, weighInsToCsv } from '../lib/storage'
@@ -9,46 +9,26 @@ import { displayWeight, inputWeightToKg } from '../lib/units'
 import { store } from '../lib/useStore'
 import type { ActivityLevel, AppData, Goals, Profile, SavedMeal, Sex, WeightGoal } from '../lib/types'
 
-type Page = 'goals' | 'calculator' | 'meals' | 'preferences' | 'data'
+export type SettingsPage = 'goals' | 'calculator' | 'meals' | 'units' | 'data'
 
-const PAGES: { id: Page; icon: string; title: string; sub: (d: AppData) => string }[] = [
+const PAGES: { id: SettingsPage; icon: string; title: string; sub: (d: AppData) => string }[] = [
   { id: 'goals', icon: '🎯', title: 'Daily goals', sub: (d) => `${d.settings.goals.calories.toLocaleString()} kcal · P ${d.settings.goals.protein} · C ${d.settings.goals.carbs} · F ${d.settings.goals.fat}` },
   { id: 'calculator', icon: '🧮', title: 'Goal calculator', sub: () => 'Work out your calories and macros' },
   { id: 'meals', icon: '⭐', title: 'My meals', sub: (d) => `${d.savedMeals.length} saved` },
-  { id: 'preferences', icon: '📏', title: 'Units', sub: (d) => `${d.settings.weightUnit} · ${d.settings.waterUnit}` },
+  { id: 'units', icon: '📏', title: 'Units', sub: (d) => (d.settings.weightUnit === 'lb' ? 'Imperial (lb, fl oz)' : 'Metric (kg, ml)') },
   { id: 'data', icon: '💾', title: 'Backup & export', sub: (d) => `${d.entries.length} diary ${d.entries.length === 1 ? 'entry' : 'entries'}` },
 ]
 
-export function Settings({ data }: { data: AppData }) {
-  const [page, setPage] = useState<Page | null>(null)
-
-  // Let the phone's back gesture / browser back close a sub-page.
-  useEffect(() => {
-    const onPop = () => setPage(null)
-    window.addEventListener('popstate', onPop)
-    return () => window.removeEventListener('popstate', onPop)
-  }, [])
-  const open = (p: Page) => {
-    history.pushState({ settingsPage: p }, '')
-    setPage(p)
-    window.scrollTo(0, 0)
-  }
-  const back = () => (history.state?.settingsPage ? history.back() : setPage(null))
-
+export function Settings({ data, page, onOpen }: { data: AppData; page: SettingsPage | null; onOpen: (p: SettingsPage) => void }) {
   if (page) {
     const meta = PAGES.find((p) => p.id === page)!
     return (
-      <div className="screen">
-        <div className="subpage-head">
-          <button className="link back" onClick={back}>
-            ‹ Settings
-          </button>
-          <h2>{meta.title}</h2>
-        </div>
+      <div className="screen slide-in">
+        <h2 className="subpage-title">{meta.title}</h2>
         {page === 'goals' && <GoalsCard data={data} />}
         {page === 'calculator' && <CalculatorCard data={data} />}
         {page === 'meals' && <MealsCard meals={data.savedMeals} />}
-        {page === 'preferences' && <PreferencesCard data={data} />}
+        {page === 'units' && <UnitsCard data={data} />}
         {page === 'data' && <DataCard data={data} />}
       </div>
     )
@@ -57,9 +37,9 @@ export function Settings({ data }: { data: AppData }) {
   return (
     <div className="screen">
       <ul className="card menu">
-        {PAGES.map((p) => (
-          <li key={p.id}>
-            <button onClick={() => open(p.id)}>
+        {PAGES.map((p, i) => (
+          <li key={p.id} style={{ animationDelay: `${i * 30}ms` }}>
+            <button onClick={() => onOpen(p.id)}>
               <span className="menu-icon" aria-hidden>
                 {p.icon}
               </span>
@@ -74,7 +54,6 @@ export function Settings({ data }: { data: AppData }) {
           </li>
         ))}
       </ul>
-      <p className="muted small center-text">All data is stored on this device only. No account, no ads, no paywall.</p>
     </div>
   )
 }
@@ -134,7 +113,10 @@ function CalculatorCard({ data }: { data: AppData }) {
   const latest = sortedWeighIns(data.weighIns).at(-1)
   const [sex, setSex] = useState<Sex>(p?.sex ?? 'male')
   const [age, setAge] = useState(String(p?.age ?? ''))
-  const [height, setHeight] = useState(String(p?.heightCm ?? ''))
+  const imperial = unit === 'lb'
+  const [height, setHeight] = useState(p?.heightCm ? String(p.heightCm) : '')
+  const [feet, setFeet] = useState(p?.heightCm ? String(Math.floor(p.heightCm / 2.54 / 12)) : '')
+  const [inches, setInches] = useState(p?.heightCm ? String(Math.round((p.heightCm / 2.54) % 12)) : '')
   const [weight, setWeight] = useState(latest ? String(displayWeight(latest.weightKg, unit)) : '')
   const [activity, setActivity] = useState<ActivityLevel>(p?.activity ?? 'light')
   const [goal, setGoal] = useState<WeightGoal>(p?.goal ?? 'lose')
@@ -145,7 +127,7 @@ function CalculatorCard({ data }: { data: AppData }) {
   const profile: Profile = {
     sex,
     age: toNum(age),
-    heightCm: toNum(height),
+    heightCm: imperial ? Math.round((toNum(feet) * 12 + toNum(inches)) * 2.54) : toNum(height),
     activity,
     goal,
     ratePerWeekKg: goal === 'maintain' ? 0 : inputWeightToKg(toNum(rate), unit),
@@ -158,20 +140,37 @@ function CalculatorCard({ data }: { data: AppData }) {
     <section className="card">
       <p className="muted small">Estimates your maintenance calories (Mifflin–St Jeor) and suggests targets.</p>
       <div className="stack">
-        <div className="grid-2">
-          <label className="field">
-            <span>Sex</span>
-            <select value={sex} onChange={(e) => setSex(e.target.value as Sex)}>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
-          </label>
-          <NumberField label="Age" value={age} onChange={setAge} step="1" />
-          <NumberField label="Height" value={height} onChange={setHeight} suffix="cm" step="1" />
-          <NumberField label="Weight" value={weight} onChange={setWeight} suffix={unit} step="0.1" />
+        <div className="field">
+          <span>Sex</span>
+          <Segmented
+            value={sex}
+            onChange={setSex}
+            options={[
+              { value: 'male', label: 'Male' },
+              { value: 'female', label: 'Female' },
+            ]}
+          />
         </div>
+        {imperial ? (
+          <>
+            <div className="grid-2">
+              <NumberField label="Age" value={age} onChange={setAge} step="1" suffix="yrs" />
+              <NumberField label="Weight" value={weight} onChange={setWeight} suffix="lb" step="0.1" />
+            </div>
+            <div className="grid-2">
+              <NumberField label="Height" value={feet} onChange={setFeet} suffix="ft" step="1" />
+              <NumberField label={'\u00a0'} value={inches} onChange={setInches} suffix="in" step="1" />
+            </div>
+          </>
+        ) : (
+          <div className="grid-3">
+            <NumberField label="Age" value={age} onChange={setAge} step="1" suffix="yrs" />
+            <NumberField label="Height" value={height} onChange={setHeight} suffix="cm" step="1" />
+            <NumberField label="Weight" value={weight} onChange={setWeight} suffix="kg" step="0.1" />
+          </div>
+        )}
         <label className="field">
-          <span>Activity</span>
+          <span>Activity level</span>
           <select value={activity} onChange={(e) => setActivity(e.target.value as ActivityLevel)}>
             {Object.entries(ACTIVITY_LABELS).map(([k, l]) => (
               <option key={k} value={k}>
@@ -180,18 +179,24 @@ function CalculatorCard({ data }: { data: AppData }) {
             ))}
           </select>
         </label>
-        <div className="grid-2">
-          <label className="field">
-            <span>Goal</span>
-            <select value={goal} onChange={(e) => setGoal(e.target.value as WeightGoal)}>
-              <option value="lose">Lose weight</option>
-              <option value="maintain">Maintain</option>
-              <option value="gain">Gain weight</option>
-            </select>
-          </label>
-          {goal !== 'maintain' && <NumberField label="Rate per week" value={rate} onChange={setRate} suffix={unit} step="0.1" />}
-          <NumberField label="Goal weight (optional)" value={goalWeight} onChange={setGoalWeight} suffix={unit} step="0.1" />
+        <div className="field">
+          <span>Goal</span>
+          <Segmented
+            value={goal}
+            onChange={setGoal}
+            options={[
+              { value: 'lose', label: 'Lose' },
+              { value: 'maintain', label: 'Maintain' },
+              { value: 'gain', label: 'Gain' },
+            ]}
+          />
         </div>
+        {goal !== 'maintain' && (
+          <div className="grid-2">
+            <NumberField label="Rate per week" value={rate} onChange={setRate} suffix={unit} step="0.1" />
+            <NumberField label="Goal weight" value={goalWeight} onChange={setGoalWeight} suffix={unit} step="0.1" />
+          </div>
+        )}
         {suggested && (
           <div className="card tight">
             <p className="small">
@@ -279,28 +284,25 @@ function MealsCard({ meals }: { meals: SavedMeal[] }) {
   )
 }
 
-function PreferencesCard({ data }: { data: AppData }) {
-  const s = data.settings
+function UnitsCard({ data }: { data: AppData }) {
+  const system = data.settings.weightUnit === 'lb' ? 'imperial' : 'metric'
   return (
     <section className="card">
-      <div className="stack">
-        <div className="grid-2">
-          <label className="field">
-            <span>Weight unit</span>
-            <select value={s.weightUnit} onChange={(e) => store.updateSettings({ weightUnit: e.target.value as 'kg' | 'lb' })}>
-              <option value="kg">Kilograms (kg)</option>
-              <option value="lb">Pounds (lb)</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>Water unit</span>
-            <select value={s.waterUnit} onChange={(e) => store.updateSettings({ waterUnit: e.target.value as 'ml' | 'oz' })}>
-              <option value="ml">Millilitres (ml)</option>
-              <option value="oz">Fluid ounces (oz)</option>
-            </select>
-          </label>
-        </div>
-      </div>
+      <Segmented
+        value={system}
+        onChange={(v) =>
+          store.updateSettings(v === 'imperial' ? { weightUnit: 'lb', waterUnit: 'oz' } : { weightUnit: 'kg', waterUnit: 'ml' })
+        }
+        options={[
+          { value: 'metric', label: 'Metric' },
+          { value: 'imperial', label: 'Imperial' },
+        ]}
+      />
+      <p className="muted small">
+        {system === 'metric'
+          ? 'Weight in kilograms, height in centimetres, water in millilitres.'
+          : 'Weight in pounds, height in feet and inches, water in fluid ounces.'}
+      </p>
     </section>
   )
 }

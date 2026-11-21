@@ -5,7 +5,7 @@ import { today } from './lib/date'
 import type { DateKey, MealSlot } from './lib/types'
 import { useAppData } from './lib/useStore'
 import { Diary } from './screens/Diary'
-import { Settings } from './screens/Settings'
+import { Settings, type SettingsPage } from './screens/Settings'
 
 // Chart-heavy screens are code-split so the diary loads fast.
 const Progress = lazy(() => import('./screens/Progress').then((m) => ({ default: m.Progress })))
@@ -35,6 +35,25 @@ export default function App() {
   const [date, setDate] = useState<DateKey>(today())
   const [addSlot, setAddSlot] = useState<MealSlot | null>(null)
   const [lastSlot, setLastSlot] = useState<MealSlot>(slotForNow())
+  const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null)
+
+  // Let the phone's back gesture / browser back close a settings sub-page.
+  useEffect(() => {
+    const onPop = () => setSettingsPage(null)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  const openSettingsPage = (p: SettingsPage) => {
+    history.pushState({ settingsPage: p }, '')
+    setSettingsPage(p)
+    window.scrollTo(0, 0)
+  }
+  const closeSettingsPage = () => (history.state?.settingsPage ? history.back() : setSettingsPage(null))
+  const switchTab = (t: Tab) => {
+    if (settingsPage) closeSettingsPage()
+    setTab(t)
+    window.scrollTo(0, 0)
+  }
 
   // Roll the diary over to the new day if the app stays open past midnight.
   useEffect(() => {
@@ -57,14 +76,27 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <h1>{tab === 'settings' ? 'Settings' : TABS.find((t) => t.id === tab)!.label}</h1>
+        {tab === 'settings' && settingsPage ? (
+          <button className="topbar-back" onClick={closeSettingsPage} aria-label="Back to Settings">
+            <span className="chev-left" aria-hidden>
+              ‹
+            </span>
+            Settings
+          </button>
+        ) : (
+          <h1>{tab === 'settings' ? 'Settings' : TABS.find((t) => t.id === tab)!.label}</h1>
+        )}
       </header>
       <main>
         <Suspense fallback={<div className="screen muted">Loading…</div>}>
+        <div className="tab-view" key={tab}>
         {tab === 'diary' && <Diary data={data} date={date} setDate={setDate} onAdd={openAdd} />}
         {tab === 'progress' && <Progress data={data} />}
         {tab === 'weight' && <Weight data={data} />}
-        {tab === 'settings' && <Settings data={data} />}
+        {tab === 'settings' && (
+          <Settings data={data} page={settingsPage} onOpen={openSettingsPage} key={settingsPage ?? 'menu'} />
+        )}
+        </div>
         </Suspense>
       </main>
 
@@ -76,7 +108,7 @@ export default function App() {
 
       <nav className="tabbar">
         {TABS.map((t) => (
-          <button key={t.id} className={t.id === tab ? 'active' : ''} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={t.id === tab ? 'active' : ''} onClick={() => switchTab(t.id)}>
             <span aria-hidden>{t.icon}</span>
             {t.label}
           </button>

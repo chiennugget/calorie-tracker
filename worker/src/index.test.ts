@@ -33,7 +33,7 @@ describe('worker', () => {
         summary: 'One plate of CKT',
       }),
     )
-    const out = await estimate('BASE64', 'shared with no one', env, fetchMock as unknown as typeof fetch)
+    const out = await estimate('BASE64', 'shared with no one', env, fetchMock as unknown as typeof fetch, 0)
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toContain(':generateContent')
     expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('k')
@@ -71,5 +71,27 @@ describe('worker', () => {
     const res = await searchFoods(new Request('https://w/search?q=milo'), { 'Access-Control-Allow-Origin': 'x' }, fetchMock as unknown as typeof fetch)
     expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toContain('search.openfoodfacts.org/search?q=milo')
     expect(await res.json()).toEqual({ hits: [{ code: '1', product_name: 'Milo' }] })
+  })
+
+  it('retries a 503 and then falls back to the lighter model', async () => {
+    const ok = { items: [{ name: 'Laksa', matchId: 'laksa', portion: 'regular', oil: 'normal', calories: 600, protein: 20, carbs: 55, fat: 33, confidence: 'high', notes: '' }], summary: '' }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('overloaded', { status: 503 }))
+      .mockResolvedValueOnce(new Response('overloaded', { status: 503 }))
+      .mockResolvedValueOnce(geminiReply(ok))
+    const out = await estimate('IMG', '', env, fetchMock as unknown as typeof fetch, 0)
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls[0]).toContain('gemini-flash-latest:')
+    expect(urls[1]).toContain('gemini-flash-latest:')
+    expect(urls[2]).toContain('gemini-flash-lite-latest:')
+    expect(out.model).toBe('gemini-flash-lite-latest')
+    expect(out.items[0].matchId).toBe('laksa')
+  })
+
+  it('does not retry bad requests', async () => {
+    const fetchMock = vi.fn(async () => new Response('bad key', { status: 400 }))
+    await expect(estimate('IMG', '', env, fetchMock as unknown as typeof fetch, 0)).rejects.toMatchObject({ status: 400 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

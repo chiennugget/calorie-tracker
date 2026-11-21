@@ -7,6 +7,8 @@ compatibility_date = "2026-11-01"
 ALLOWED_ORIGINS = "https://chiennugget.github.io"
 # Rolling alias for Google's current Flash model (free tier). Change to pin a version.
 GEMINI_MODEL = "gemini-flash-latest"
+# Used automatically when the main model is overloaded (503) or out of free quota (429).
+GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
 
 # Secrets (set with `npx wrangler secret put <NAME>`, never commit them):
 #   GEMINI_API_KEY  – from https://aistudio.google.com/apikey

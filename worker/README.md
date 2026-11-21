@@ -56,7 +56,7 @@ You need [Node.js](https://nodejs.org) 20 or newer. Check with `node -v`.
 
 ## Changing things
 
-- **Different model:** edit `GEMINI_MODEL` in `wrangler.toml` (default is `gemini-flash-latest`), then run `npx wrangler deploy`.
+- **Different model:** edit `GEMINI_MODEL` in `wrangler.toml` (default is `gemini-flash-latest`), then run `npx wrangler deploy`. When that model is overloaded (503) or out of free quota (429), the server retries and then switches to `GEMINI_FALLBACK_MODEL` (default `gemini-flash-lite-latest`).
 - **Running the app locally too:** add `http://localhost:5173` to `ALLOWED_ORIGINS` in `wrangler.toml`.
 - **See live logs:**
 

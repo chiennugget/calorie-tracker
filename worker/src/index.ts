@@ -18,6 +18,7 @@ export interface Env {
   ALLOWED_ORIGINS?: string
   /** Defaults to the rolling "latest Flash" alias so Google model retirements don't break it. */
   GEMINI_MODEL?: string
+  GEMINI_FALLBACK_MODEL?: string
 }
 
 export interface AiItem {
@@ -40,6 +41,8 @@ export interface AiEstimate {
 }
 
 const DEFAULT_MODEL = 'gemini-flash-latest'
+/** Lighter model with its own free quota, used when the main one is overloaded. Set GEMINI_FALLBACK_MODEL="" to disable. */
+const DEFAULT_FALLBACK_MODEL = 'gemini-flash-lite-latest'
 const MAX_IMAGE_BASE64 = 6_000_000 // ~4.5 MB raw; the app sends ~150 KB
 
 const dishList = SG_DISHES.map((d) => `${d.id}: ${d.name} [${d.serving}, ~${d.n.calories} kcal]`).join('\n')
@@ -138,11 +141,18 @@ export function sanitiseEstimate(raw: unknown, model: string): AiEstimate {
   return { items, summary: String(obj.summary ?? '').slice(0, 300), model }
 }
 
-export async function estimate(image: string, note: string, env: Env, fetchImpl: typeof fetch = fetch): Promise<AiEstimate> {
-  const model = env.GEMINI_MODEL || DEFAULT_MODEL
-  const userText = note
-    ? `Estimate the food in this photo. Extra info from the user: ${note.slice(0, 300)}`
-    : 'Estimate the food in this photo.'
+/** Statuses where trying again (or another model) can help: rate limit, overload, server errors, unknown model. */
+const RETRYABLE = new Set([404, 429, 500, 502, 503, 504])
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Primary model first, then the fallback (if different). */
+export function modelChain(env: Env): string[] {
+  const primary = env.GEMINI_MODEL || DEFAULT_MODEL
+  const fallback = env.GEMINI_FALLBACK_MODEL ?? DEFAULT_FALLBACK_MODEL
+  return fallback && fallback !== primary ? [primary, fallback] : [primary]
+}
+
+async function callGemini(model: string, image: string, userText: string, env: Env, fetchImpl: typeof fetch): Promise<AiEstimate> {
   const res = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
@@ -154,7 +164,7 @@ export async function estimate(image: string, note: string, env: Env, fetchImpl:
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw new UpstreamError(res.status, detail.slice(0, 500))
+    throw new UpstreamError(res.status, `${model}: ${detail.slice(0, 400)}`)
   }
   const body = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[]
@@ -169,6 +179,38 @@ export async function estimate(image: string, note: string, env: Env, fetchImpl:
     throw new UpstreamError(502, 'Model returned invalid JSON')
   }
   return sanitiseEstimate(parsed, model)
+}
+
+/**
+ * Gemini's free tier often answers 503 ("model overloaded") at busy times.
+ * Retry each model once after a short pause, then fall back to the next model.
+ */
+export async function estimate(
+  image: string,
+  note: string,
+  env: Env,
+  fetchImpl: typeof fetch = fetch,
+  delayMs = 1200,
+): Promise<AiEstimate> {
+  const userText = note
+    ? `Estimate the food in this photo. Extra info from the user: ${note.slice(0, 300)}`
+    : 'Estimate the food in this photo.'
+  let lastError: UpstreamError | undefined
+  for (const model of modelChain(env)) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await callGemini(model, image, userText, env, fetchImpl)
+      } catch (err) {
+        if (!(err instanceof UpstreamError)) throw err
+        lastError = err
+        if (!RETRYABLE.has(err.status)) throw err
+        // 404 (unknown model) and 429 (this model's quota) won't fix themselves: go straight to the fallback.
+        if (err.status === 404 || err.status === 429) break
+        if (attempt === 0) await sleep(delayMs)
+      }
+    }
+  }
+  throw lastError ?? new UpstreamError(502, 'No model available')
 }
 
 const OFF_FIELDS = 'code,product_name,brands,nutriments,serving_size,serving_quantity'
@@ -218,7 +260,7 @@ export default {
     if (!env.GEMINI_API_KEY) return json({ error: 'Server is missing GEMINI_API_KEY' }, 500, cors)
 
     const { pathname } = new URL(request.url)
-    if (pathname === '/health') return json({ ok: true, model: env.GEMINI_MODEL || DEFAULT_MODEL }, 200, cors)
+    if (pathname === '/health') return json({ ok: true, model: modelChain(env).join(' → ') }, 200, cors)
     if (pathname === '/search' && request.method === 'GET') return searchFoods(request, cors)
     if (pathname !== '/estimate' || request.method !== 'POST') return json({ error: 'Not found' }, 404, cors)
 
@@ -239,10 +281,14 @@ export default {
       if (err instanceof UpstreamError) {
         const message =
           err.status === 429
-            ? 'Free AI quota used up for now — try again later.'
-            : err.status === 400 || err.status === 403
-              ? `AI request rejected (${err.status}). Check the Gemini API key / model.`
-              : `AI service error (${err.status}).`
+            ? 'Free AI quota used up for now. Try again later.'
+            : err.status === 503 || err.status === 500 || err.status === 504
+              ? "Google's AI is overloaded right now. Wait a minute and try again."
+              : err.status === 400 || err.status === 403
+                ? `AI request rejected (${err.status}). Check the Gemini API key.`
+                : err.status === 404
+                  ? 'AI model not found. Check GEMINI_MODEL in wrangler.toml.'
+                  : `AI service error (${err.status}).`
         return json({ error: message, detail: err.message }, err.status === 429 ? 429 : 502, cors)
       }
       return json({ error: 'Unexpected error' }, 500, cors)

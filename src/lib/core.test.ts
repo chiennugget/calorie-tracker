@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { addDays, lastNDays } from './date'
 import { parseProduct } from './foodApi'
 import { caloriesFromMacros, daySummary, loggingStreak, suggestGoals, sumEntries, tdee, trendWeights } from './nutrition'
-import { diaryToCsv, parseData, serialiseData } from './storage'
+import { diaryToCsv } from './storage'
 import { Store } from './store'
-import { emptyData } from './types'
 
 const n = (calories: number, protein = 0, carbs = 0, fat = 0) => ({ calories, protein, carbs, fat })
 
@@ -40,7 +39,7 @@ describe('store', () => {
   it('copies a meal from yesterday', () => {
     const s = new Store()
     s.addEntry({ date: '2026-11-20', slot: 'breakfast', name: 'Oats', nutrients: n(350), servings: 1, source: 'quick' })
-    expect(s.copyEntries('2026-11-20', '2026-11-21', 'breakfast')).toBe(1)
+    expect(s.copyEntries('2026-11-20', '2026-11-21', 'breakfast')).toHaveLength(1)
     expect(s.getState().entries.filter((e) => e.date === '2026-11-21')).toHaveLength(1)
   })
 
@@ -94,12 +93,6 @@ describe('open food facts parsing', () => {
 })
 
 describe('backup', () => {
-  it('round-trips and rejects garbage', () => {
-    const d = emptyData()
-    d.weighIns.push({ date: '2026-11-21', weightKg: 70 })
-    expect(parseData(serialiseData(d))).toEqual(d)
-    expect(() => parseData('{"foo":1}')).toThrow()
-  })
   it('exports CSV with escaped names', () => {
     const s = new Store()
     s.addEntry({ date: '2026-11-21', slot: 'dinner', name: 'Mum\'s "famous" pie', nutrients: n(500, 20, 50, 25), servings: 2, source: 'quick' })

@@ -90,8 +90,20 @@ export interface Settings {
   profile?: Profile
 }
 
+/** Housekeeping that isn't diary data. */
+export interface Meta {
+  /** When the user last exported a JSON backup (ms epoch). */
+  lastBackupAt?: number
+  /** When the backup reminder was last dismissed (ms epoch). */
+  backupReminderDismissedAt?: number
+  /** True once the first-run welcome card has been completed or skipped. */
+  onboarded: boolean
+}
+
+export const DATA_VERSION = 2
+
 export interface AppData {
-  version: 1
+  version: typeof DATA_VERSION
   entries: FoodEntry[]
   savedMeals: SavedMeal[]
   weighIns: WeighIn[]
@@ -99,6 +111,7 @@ export interface AppData {
   /** ml of water per day */
   water: Record<DateKey, number>
   settings: Settings
+  meta: Meta
 }
 
 export const ZERO: Nutrients = { calories: 0, protein: 0, carbs: 0, fat: 0 }
@@ -111,12 +124,13 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export function emptyData(): AppData {
   return {
-    version: 1,
+    version: DATA_VERSION,
     entries: [],
     savedMeals: [],
     weighIns: [],
     exercise: [],
     water: {},
     settings: structuredClone(DEFAULT_SETTINGS),
+    meta: { onboarded: false },
   }
 }

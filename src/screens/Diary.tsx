@@ -171,7 +171,7 @@ export function Diary({
                 <button
                   className="pill-btn ghost"
                   onClick={() => {
-                    const n = store.copyEntries(addDays(date, -1), date, slot)
+                    const n = store.copyEntries(addDays(date, -1), date, slot).length
                     toast(`Copied ${n} item${n === 1 ? '' : 's'} from yesterday`)
                   }}
                 >

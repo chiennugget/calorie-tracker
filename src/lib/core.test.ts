@@ -44,13 +44,13 @@ describe('store', () => {
     expect(s.getState().entries.filter((e) => e.date === '2026-11-21')).toHaveLength(1)
   })
 
-  it('computes remaining calories including exercise', () => {
+  it('does not add exercise to remaining calories', () => {
     const s = new Store()
     s.addEntry({ date: '2026-11-21', slot: 'lunch', name: 'x', nutrients: n(1500), servings: 1, source: 'quick' })
     s.addExercise({ date: '2026-11-21', name: 'Run', calories: 300 })
-    expect(daySummary(s.getState(), '2026-11-21').remaining).toBe(2000 + 300 - 1500)
-    s.updateSettings({ addExerciseToBudget: false })
-    expect(daySummary(s.getState(), '2026-11-21').remaining).toBe(500)
+    const day = daySummary(s.getState(), '2026-11-21')
+    expect(day.remaining).toBe(500)
+    expect(day.exercise).toBe(300)
   })
 
   it('counts logging streak', () => {

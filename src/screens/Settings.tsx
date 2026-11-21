@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MealForm } from '../components/MealForm'
 import { toast } from '../components/toast'
 import { NumberField, Sheet, kcal, toNum } from '../components/ui'
@@ -9,17 +9,72 @@ import { displayWeight, inputWeightToKg } from '../lib/units'
 import { store } from '../lib/useStore'
 import type { ActivityLevel, AppData, Goals, Profile, SavedMeal, Sex, WeightGoal } from '../lib/types'
 
+type Page = 'goals' | 'calculator' | 'meals' | 'preferences' | 'data'
+
+const PAGES: { id: Page; icon: string; title: string; sub: (d: AppData) => string }[] = [
+  { id: 'goals', icon: '🎯', title: 'Daily goals', sub: (d) => `${d.settings.goals.calories.toLocaleString()} kcal · P ${d.settings.goals.protein} · C ${d.settings.goals.carbs} · F ${d.settings.goals.fat}` },
+  { id: 'calculator', icon: '🧮', title: 'Goal calculator', sub: () => 'Work out your calories and macros' },
+  { id: 'meals', icon: '⭐', title: 'My meals', sub: (d) => `${d.savedMeals.length} saved` },
+  { id: 'preferences', icon: '📏', title: 'Units', sub: (d) => `${d.settings.weightUnit} · ${d.settings.waterUnit}` },
+  { id: 'data', icon: '💾', title: 'Backup & export', sub: (d) => `${d.entries.length} diary ${d.entries.length === 1 ? 'entry' : 'entries'}` },
+]
+
 export function Settings({ data }: { data: AppData }) {
+  const [page, setPage] = useState<Page | null>(null)
+
+  // Let the phone's back gesture / browser back close a sub-page.
+  useEffect(() => {
+    const onPop = () => setPage(null)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  const open = (p: Page) => {
+    history.pushState({ settingsPage: p }, '')
+    setPage(p)
+    window.scrollTo(0, 0)
+  }
+  const back = () => (history.state?.settingsPage ? history.back() : setPage(null))
+
+  if (page) {
+    const meta = PAGES.find((p) => p.id === page)!
+    return (
+      <div className="screen">
+        <div className="subpage-head">
+          <button className="link back" onClick={back}>
+            ‹ Settings
+          </button>
+          <h2>{meta.title}</h2>
+        </div>
+        {page === 'goals' && <GoalsCard data={data} />}
+        {page === 'calculator' && <CalculatorCard data={data} />}
+        {page === 'meals' && <MealsCard meals={data.savedMeals} />}
+        {page === 'preferences' && <PreferencesCard data={data} />}
+        {page === 'data' && <DataCard data={data} />}
+      </div>
+    )
+  }
+
   return (
     <div className="screen">
-      <GoalsCard data={data} />
-      <CalculatorCard data={data} />
-      <MealsCard meals={data.savedMeals} />
-      <PreferencesCard data={data} />
-      <DataCard data={data} />
-      <p className="muted small center-text">
-        All data is stored on this device only. No account, no ads, no paywall.
-      </p>
+      <ul className="card menu">
+        {PAGES.map((p) => (
+          <li key={p.id}>
+            <button onClick={() => open(p.id)}>
+              <span className="menu-icon" aria-hidden>
+                {p.icon}
+              </span>
+              <span className="grow">
+                <span className="item-name">{p.title}</span>
+                <span className="muted small">{p.sub(data)}</span>
+              </span>
+              <span className="chev" aria-hidden>
+                ›
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="muted small center-text">All data is stored on this device only. No account, no ads, no paywall.</p>
     </div>
   )
 }
@@ -37,7 +92,6 @@ function GoalsCard({ data }: { data: AppData }) {
   const macroKcal = caloriesFromMacros({ protein: toNum(v.protein), carbs: toNum(v.carbs), fat: toNum(v.fat) })
   return (
     <section className="card">
-      <h3>Daily goals</h3>
       <form
         className="stack"
         onSubmit={(e) => {
@@ -102,7 +156,6 @@ function CalculatorCard({ data }: { data: AppData }) {
 
   return (
     <section className="card">
-      <h3>Goal calculator</h3>
       <p className="muted small">Estimates your maintenance calories (Mifflin–St Jeor) and suggests targets.</p>
       <div className="stack">
         <div className="grid-2">
@@ -170,12 +223,9 @@ function MealsCard({ meals }: { meals: SavedMeal[] }) {
   const [editing, setEditing] = useState<SavedMeal | 'new' | null>(null)
   return (
     <section className="card">
-      <header className="row between">
-        <h3>My meals ({meals.length})</h3>
-        <button className="link" onClick={() => setEditing('new')}>
-          + New meal
-        </button>
-      </header>
+      <button className="btn primary" onClick={() => setEditing('new')}>
+        + New meal
+      </button>
       {meals.length === 0 && <p className="muted small">Save meals you eat often so you can add them in one tap.</p>}
       <ul className="list">
         {[...meals]
@@ -233,7 +283,6 @@ function PreferencesCard({ data }: { data: AppData }) {
   const s = data.settings
   return (
     <section className="card">
-      <h3>Preferences</h3>
       <div className="stack">
         <div className="grid-2">
           <label className="field">
@@ -251,10 +300,6 @@ function PreferencesCard({ data }: { data: AppData }) {
             </select>
           </label>
         </div>
-        <label className="check">
-          <input type="checkbox" checked={s.addExerciseToBudget} onChange={(e) => store.updateSettings({ addExerciseToBudget: e.target.checked })} />
-          Add exercise calories to my daily budget
-        </label>
       </div>
     </section>
   )
@@ -274,7 +319,6 @@ function DataCard({ data }: { data: AppData }) {
   const stamp = today()
   return (
     <section className="card">
-      <h3>Your data</h3>
       <p className="muted small">
         {data.entries.length} diary entries · {data.savedMeals.length} saved meals · {data.weighIns.length} weigh-ins. Back up regularly
         — clearing browser data deletes it.

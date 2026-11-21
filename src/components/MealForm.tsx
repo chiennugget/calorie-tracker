@@ -100,7 +100,7 @@ export function MealForm({
       {showSaveToggle && (
         <label className="check">
           <input type="checkbox" checked={saveToMeals} onChange={(e) => setSaveToMeals(e.target.checked)} />
-          Also save to My Meals for one-tap adding later
+          Save to My Meals
         </label>
       )}
       <div className="row gap">

@@ -47,26 +47,21 @@ export function Diary({
       )}
 
       <section className="card summary">
-        <Ring value={s.food.calories} goal={s.goal + (data.settings.addExerciseToBudget ? s.exercise : 0)} size={132}>
+        <Ring value={s.food.calories} goal={s.goal} size={140}>
           <div className={`big ${s.remaining < 0 ? 'neg' : ''}`}>{kcal(Math.abs(s.remaining))}</div>
-          <div className="muted small">{s.remaining < 0 ? 'over' : 'remaining'}</div>
+          <div className="muted small">{s.remaining < 0 ? 'kcal over' : 'kcal left'}</div>
         </Ring>
-        <div className="equation">
+        <div className="kpis">
           <div>
-            <b>{kcal(s.goal)}</b>
             <span>Goal</span>
+            <b>{kcal(s.goal)}</b>
           </div>
           <div>
-            <b>− {kcal(s.food.calories)}</b>
-            <span>Food</span>
+            <span>Eaten</span>
+            <b>{kcal(s.food.calories)}</b>
           </div>
-          {data.settings.addExerciseToBudget && (
-            <div>
-              <b>+ {kcal(s.exercise)}</b>
-              <span>Exercise</span>
-            </div>
-          )}
         </div>
+        {s.exercise > 0 && <p className="burned">🏃 {kcal(s.exercise)} kcal burned from exercise</p>}
         <div className="macros">
           {(['protein', 'carbs', 'fat'] as const).map((k) => (
             <div key={k} className={`macro ${k[0]}`}>

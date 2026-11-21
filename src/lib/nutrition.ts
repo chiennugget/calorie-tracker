@@ -63,13 +63,12 @@ export function daySummary(data: AppData, date: DateKey): DaySummary {
   const food = sumEntries(dayEntries)
   const exercise = exerciseCalories(data, date)
   const goal = data.settings.goals.calories
-  const budget = goal + (data.settings.addExerciseToBudget ? exercise : 0)
   return {
     date,
     food,
     exercise,
     goal,
-    remaining: budget - food.calories,
+    remaining: goal - food.calories,
     water: data.water[date] ?? 0,
     logged: dayEntries.length > 0,
   }

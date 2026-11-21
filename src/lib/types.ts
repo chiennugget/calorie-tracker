@@ -88,8 +88,6 @@ export interface Settings {
   waterUnit: 'ml' | 'oz'
   goals: Goals
   profile?: Profile
-  /** MyFitnessPal-style: exercise calories increase your remaining budget. */
-  addExerciseToBudget: boolean
 }
 
 export interface AppData {
@@ -109,7 +107,6 @@ export const DEFAULT_SETTINGS: Settings = {
   weightUnit: 'kg',
   waterUnit: 'ml',
   goals: { calories: 2000, protein: 150, carbs: 200, fat: 67, waterMl: 2500 },
-  addExerciseToBudget: true,
 }
 
 export function emptyData(): AppData {

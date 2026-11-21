@@ -74,7 +74,7 @@ export function FoodPicker({
       </div>
       <label className="check">
         <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-        Also save to My Meals
+        Save to My Meals
       </label>
       <button
         className="btn primary"

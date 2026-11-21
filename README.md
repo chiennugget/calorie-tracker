@@ -19,7 +19,7 @@ A free, private calorie and macro tracker with the everyday MyFitnessPal feature
 - Daily calorie and macro goals, shown with a progress ring and bars.
 - A **goal calculator** (Mifflin–St Jeor BMR × activity) that suggests calorie and macro targets for losing, maintaining or gaining weight.
 - **Water** tracking with quick-add buttons (ml or oz).
-- **Exercise** logging with rough presets. Exercise calories can be added to your daily budget, as in MFP.
+- **Exercise** logging with rough presets. Burned calories are shown separately and do not change your remaining calories.
 - A logging streak.
 
 **Weight**

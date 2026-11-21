@@ -3,6 +3,9 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ReferenceLine, Respo
 import { Segmented, fmt, kcal } from '../components/ui'
 import { formatShort, fromDateKey, lastNDays, today } from '../lib/date'
 import { daySummary, entriesFor, loggingStreak, sumEntries, trendWeights } from '../lib/nutrition'
+import { adaptiveCalorieGoal, estimateTdee, projectGoalDate } from '../lib/insights'
+import { store } from '../lib/useStore'
+import { toast } from '../components/toast'
 import { displayWeight } from '../lib/units'
 import type { AppData } from '../lib/types'
 import { MEAL_SLOTS, SLOT_LABELS } from '../lib/types'
@@ -41,15 +44,12 @@ export function Progress({ data }: { data: AppData }) {
     return { slot, avg: logged.length ? total / logged.length : 0 }
   })
 
-  // Estimated actual TDEE from intake vs trend weight change (needs ~2+ weeks of data).
-  const tdeeEstimate = useMemo(() => {
-    const trend = trendWeights(data.weighIns).filter((p) => p.date >= days[0])
-    if (trend.length < 2 || logged.length < 10) return null
-    const spanDays = (fromDateKey(trend.at(-1)!.date).getTime() - fromDateKey(trend[0].date).getTime()) / 864e5
-    if (spanDays < 14) return null
-    const kgPerDay = (trend.at(-1)!.trend - trend[0].trend) / spanDays
-    return Math.round(avgCal - kgPerDay * 7700)
-  }, [data.weighIns, days, logged.length, avgCal])
+  const t = today()
+  const tdeeEst = useMemo(() => estimateTdee(data, t), [data, t])
+  const projection = useMemo(() => projectGoalDate(data, t), [data, t])
+  const profile = data.settings.profile
+  const adaptiveGoal = tdeeEst && profile ? adaptiveCalorieGoal(tdeeEst.tdee, profile) : null
+  const unit = data.settings.weightUnit
 
   return (
     <div className="screen">
@@ -174,16 +174,56 @@ export function Progress({ data }: { data: AppData }) {
           const t = trendWeights(data.weighIns).filter((p) => p.date >= days[0])
           if (t.length < 2) return <p className="muted">Log weigh-ins on the Weight tab to see changes here.</p>
           const diff = t.at(-1)!.trend - t[0].trend
-          const unit = data.settings.weightUnit
           return (
             <p>
               Trend weight {diff <= 0 ? 'down' : 'up'} <b>{Math.abs(displayWeight(diff, unit))} {unit}</b> over this period.
             </p>
           )
         })()}
-        {tdeeEstimate && (
+      </section>
+
+      <section className="card" aria-labelledby="maint-title">
+        <h3 id="maint-title">Your real maintenance</h3>
+        {tdeeEst ? (
+          <div className="insight">
+            <p>
+              Over the last 4 weeks you averaged <b>{kcal(tdeeEst.avgIntake)} kcal</b> a day and your trend weight moved{' '}
+              <b>
+                {tdeeEst.kgPerWeek > 0 ? '+' : ''}
+                {displayWeight(tdeeEst.kgPerWeek, unit)} {unit}/week
+              </b>
+              . That puts your maintenance at about <b>{kcal(tdeeEst.tdee)} kcal/day</b>.
+            </p>
+            {adaptiveGoal !== null && profile && profile.goal !== 'maintain' && Math.abs(adaptiveGoal - goal) >= 50 && (
+              <>
+                <p className="small">
+                  To {profile.goal} {displayWeight(profile.ratePerWeekKg, unit)} {unit}/week, aim for <b>{kcal(adaptiveGoal)} kcal</b> instead of{' '}
+                  {kcal(goal)}.
+                </p>
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    const prev = data.settings.goals
+                    store.updateSettings({ goals: { ...prev, calories: adaptiveGoal } })
+                    toast(`Calorie goal set to ${kcal(adaptiveGoal)}`, { label: 'Undo', run: () => store.updateSettings({ goals: prev }) })
+                  }}
+                >
+                  Use {kcal(adaptiveGoal)} kcal as my goal
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
           <p className="muted small">
-            Based on your intake and weight trend, your estimated real maintenance is about <b>{kcal(tdeeEstimate)} kcal/day</b>.
+            Log your food on at least 10 days and weigh in a few times over 2+ weeks. The app then works out your real maintenance from
+            what you ate and how your weight moved. That's usually more accurate than any formula.
+          </p>
+        )}
+        {projection && (
+          <p className="small">
+            🎯 At your current pace ({displayWeight(Math.abs(projection.kgPerWeek), unit)} {unit}/week) you'll reach your goal weight around{' '}
+            <b>{fromDateKey(projection.date).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}</b> (
+            {Math.round(projection.weeks)} weeks).
           </p>
         )}
       </section>

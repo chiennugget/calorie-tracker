@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { lookupBarcode, searchFoods, type FoodProduct } from '../lib/foodApi'
 import { formatDayLabel } from '../lib/date'
 import { store } from '../lib/useStore'
-import type { AppData, DateKey, MealSlot, Nutrients, SavedMeal } from '../lib/types'
+import type { AppData, DateKey, FoodEntry, MealSlot, Nutrients, SavedMeal } from '../lib/types'
+import { recentFoods, recentMeals, usualFoods } from '../lib/insights'
 import { MEAL_SLOTS, SLOT_LABELS } from '../lib/types'
 import { BarcodeScanner } from './BarcodeScanner'
 import { FoodPicker, type PickedFood } from './FoodPicker'
 import { MealForm } from './MealForm'
 import { toast } from './toast'
-import { MacroLine, NumberField, Segmented, Sheet, kcal, toNum } from './ui'
+import { MacroLine, NumberField, Segmented, Sheet, fmt, kcal, toNum } from './ui'
 import { HawkerPicker } from './HawkerPicker'
 import { POPULAR_SG_DISHES, searchSgDishes, type SgDish } from '../lib/sgFoods'
 
@@ -30,7 +31,7 @@ export function AddFoodSheet({
   data: AppData
 }) {
   const [slot, setSlot] = useState<MealSlot>(initialSlot)
-  const [tab, setTab] = useState<Tab>(data.savedMeals.length ? 'meals' : 'quick')
+  const [tab, setTab] = useState<Tab>(data.entries.length ? 'recent' : 'search')
 
   useEffect(() => {
     if (open) setSlot(initialSlot)
@@ -103,7 +104,7 @@ export function AddFoodSheet({
           />
         )}
         {tab === 'meals' && <SavedMealsTab meals={data.savedMeals} onAdd={add} onGoQuick={() => setTab('quick')} />}
-        {tab === 'recent' && <RecentTab data={data} onAdd={add} />}
+        {tab === 'recent' && <RecentTab data={data} date={date} slot={slot} onAdd={add} />}
         {tab === 'search' && <SearchTab onAdd={(f) => add({ ...f, source: 'food' })} />}
         {tab === 'scan' && (
           <BarcodeTab onAdd={(f) => add({ ...f, source: 'food' })} />
@@ -218,41 +219,79 @@ function SavedMealsTab({ meals, onAdd, onGoQuick }: { meals: SavedMeal[]; onAdd:
   )
 }
 
-function RecentTab({ data, onAdd }: { data: AppData; onAdd: AddFn }) {
-  const recent = useMemo(() => {
-    const seen = new Map<string, AppData['entries'][number]>()
-    ;[...data.entries]
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .forEach((e) => {
-        const k = e.name.toLowerCase() + '|' + e.nutrients.calories
-        if (!seen.has(k)) seen.set(k, e)
-      })
-    return [...seen.values()].slice(0, 40)
-  }, [data.entries])
+function RecentTab({ data, date, slot, onAdd }: { data: AppData; date: DateKey; slot: MealSlot; onAdd: AddFn }) {
+  const usual = useMemo(() => usualFoods(data, slot), [data, slot])
+  const usualKeys = new Set(usual.map((u) => u.entry.id))
+  const recent = useMemo(() => recentFoods(data, slot), [data, slot])
+  const meals = useMemo(() => recentMeals(data, date), [data, date])
   if (!recent.length) return <p className="empty muted">Foods you log will show up here.</p>
+
+  const row = (e: FoodEntry, sub?: string) => (
+    <ServingRow
+      key={e.id}
+      name={e.name}
+      nutrients={e.nutrients}
+      servingLabel={e.servingLabel}
+      sub={sub ?? (e.servings !== 1 ? `last: ${fmt(e.servings)}×` : undefined)}
+      onAdd={(servings) =>
+        onAdd({
+          name: e.name,
+          nutrients: e.nutrients,
+          servings,
+          servingLabel: e.servingLabel,
+          source: e.source,
+          savedMealId: e.savedMealId,
+          barcode: e.barcode,
+        })
+      }
+    />
+  )
+
   return (
-    <ul className="list">
-      {recent.map((e) => (
-        <ServingRow
-          key={e.id}
-          name={e.name}
-          nutrients={e.nutrients}
-          servingLabel={e.servingLabel}
-          sub={e.servings !== 1 ? `last: ${e.servings}×` : undefined}
-          onAdd={(servings) =>
-            onAdd({
-              name: e.name,
-              nutrients: e.nutrients,
-              servings,
-              servingLabel: e.servingLabel,
-              source: e.source,
-              savedMealId: e.savedMealId,
-              barcode: e.barcode,
-            })
-          }
-        />
-      ))}
-    </ul>
+    <div className="stack">
+      {usual.length > 0 && (
+        <section>
+          <h4 className="section-label">Your usual {SLOT_LABELS[slot].toLowerCase()}</h4>
+          <ul className="list">{usual.map((u) => row(u.entry, `${u.slotCount}× at ${SLOT_LABELS[slot].toLowerCase()}`))}</ul>
+        </section>
+      )}
+      {meals.length > 0 && (
+        <section>
+          <h4 className="section-label">Log a whole meal again</h4>
+          <ul className="list">
+            {meals.map((m) => (
+              <li key={`${m.date}-${m.slot}`} className="list-item">
+                <div className="row">
+                  <div className="grow">
+                    <div className="item-name">{m.entries.map((e) => e.name).join(' + ')}</div>
+                    <div className="muted small">
+                      {kcal(m.calories)} kcal · {SLOT_LABELS[m.slot]}, {formatDayLabel(m.date).toLowerCase()}
+                    </div>
+                  </div>
+                  <button
+                    className="add-btn"
+                    aria-label={`Add all ${m.entries.length} items from ${SLOT_LABELS[m.slot]} ${formatDayLabel(m.date)}`}
+                    onClick={() => {
+                      const copies = store.copyEntries(m.date, date, m.slot, slot)
+                      toast(`Added ${copies.length} items to ${SLOT_LABELS[slot]}`, {
+                        label: 'Undo',
+                        run: () => store.deleteEntries(copies.map((c) => c.id)),
+                      })
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <section>
+        <h4 className="section-label">Recent</h4>
+        <ul className="list">{recent.filter((r) => !usualKeys.has(r.entry.id)).map((r) => row(r.entry))}</ul>
+      </section>
+    </div>
   )
 }
 

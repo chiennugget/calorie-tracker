@@ -4,7 +4,8 @@ import { toast } from '../components/toast'
 import { NumberField, Segmented, Sheet, kcal, toNum } from '../components/ui'
 import { today } from '../lib/date'
 import { ACTIVITY_LABELS, bmr, caloriesFromMacros, sortedWeighIns, suggestGoals, tdee } from '../lib/nutrition'
-import { diaryToCsv, parseData, serialiseData, weighInsToCsv } from '../lib/storage'
+import { diaryToCsv, parseData, weighInsToCsv } from '../lib/storage'
+import { downloadBackup, downloadFile } from '../lib/backup'
 import { displayWeight, inputWeightToKg } from '../lib/units'
 import { store } from '../lib/useStore'
 import type { ActivityLevel, AppData, Goals, Profile, SavedMeal, Sex, WeightGoal } from '../lib/types'
@@ -83,6 +84,7 @@ function GoalsCard({ data }: { data: AppData }) {
             waterMl: data.settings.waterUnit === 'oz' ? toNum(v.water) * 29.5735 : toNum(v.water),
           }
           store.updateSettings({ goals })
+          store.updateMeta({ onboarded: true })
           toast('Goals saved')
         }}
       >
@@ -213,6 +215,7 @@ function CalculatorCard({ data }: { data: AppData }) {
           onClick={() => {
             if (!suggested) return
             store.updateSettings({ profile, goals: suggested })
+            store.updateMeta({ onboarded: true })
             if (!data.weighIns.some((w) => w.date === today())) store.logWeight({ date: today(), weightKg })
             toast('Goals updated from calculator')
           }}
@@ -307,15 +310,6 @@ function UnitsCard({ data }: { data: AppData }) {
   )
 }
 
-function download(name: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
 function DataCard({ data }: { data: AppData }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const stamp = today()
@@ -326,16 +320,16 @@ function DataCard({ data }: { data: AppData }) {
         — clearing browser data deletes it.
       </p>
       <div className="row gap wrap">
-        <button className="btn" onClick={() => download(`calorie-tracker-backup-${stamp}.json`, serialiseData(data), 'application/json')}>
+        <button className="btn" onClick={() => downloadBackup(data)}>
           Export backup
         </button>
         <button className="btn" onClick={() => fileRef.current?.click()}>
           Import backup
         </button>
-        <button className="btn ghost" onClick={() => download(`food-diary-${stamp}.csv`, diaryToCsv(data), 'text/csv')}>
+        <button className="btn ghost" onClick={() => downloadFile(`food-diary-${stamp}.csv`, diaryToCsv(data), 'text/csv')}>
           Diary CSV
         </button>
-        <button className="btn ghost" onClick={() => download(`weigh-ins-${stamp}.csv`, weighInsToCsv(data), 'text/csv')}>
+        <button className="btn ghost" onClick={() => downloadFile(`weigh-ins-${stamp}.csv`, weighInsToCsv(data), 'text/csv')}>
           Weight CSV
         </button>
       </div>

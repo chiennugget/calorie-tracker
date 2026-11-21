@@ -58,3 +58,24 @@ test('progress shows the adaptive maintenance estimate', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Your real maintenance' })).toBeVisible()
   await expect(page.getByText(/puts your maintenance at about/)).toBeVisible()
 })
+
+test('macro legend labels never overlap their values, even at 320px wide', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 })
+  await seed(page, data)
+  await page.goto('./')
+  await page.locator('nav.tabbar').getByRole('button', { name: 'Progress' }).click()
+  const rows = page.locator('.legend li')
+  await expect(rows).toHaveCount(3)
+  // Measure the rendered text, not the element box: a shrunken flex box can
+  // end in time while its text still spills over the grams.
+  const gaps = await rows.evaluateAll((lis) =>
+    lis.map((li) => {
+      const range = document.createRange()
+      range.selectNodeContents(li.querySelector('.grow')!)
+      const text = range.getBoundingClientRect()
+      const value = li.querySelector('b')!.getBoundingClientRect()
+      return value.left - text.right
+    }),
+  )
+  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(4)
+})

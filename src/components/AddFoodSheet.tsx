@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { IconCheck, IconPlus } from './Icons'
 import { lookupBarcode, searchFoods, type FoodProduct } from '../lib/foodApi'
 import { formatDayLabel } from '../lib/date'
 import { store } from '../lib/useStore'
 import type { AppData, DateKey, FoodEntry, MealSlot, Nutrients, SavedMeal } from '../lib/types'
-import { recentFoods, recentMeals, usualFoods } from '../lib/insights'
+import { foodKey, recentFoods, recentMeals, usualFoods } from '../lib/insights'
 import { MEAL_SLOTS, SLOT_LABELS } from '../lib/types'
 import { BarcodeScanner } from './BarcodeScanner'
 import { FoodPicker, type PickedFood } from './FoodPicker'
@@ -124,6 +125,27 @@ type AddFn = (f: {
   barcode?: string
 }) => void
 
+/** Round "+" that flips to a green tick for a moment, so repeated adds from one list feel confirmed. */
+function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
+  const [done, setDone] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  return (
+    <button
+      className={`add-btn ${done ? 'done' : ''}`}
+      aria-label={label}
+      onClick={() => {
+        onClick()
+        setDone(true)
+        clearTimeout(timer.current)
+        timer.current = setTimeout(() => setDone(false), 1200)
+      }}
+    >
+      {done ? <IconCheck size={20} strokeWidth={2.8} /> : <IconPlus size={20} strokeWidth={2.6} />}
+    </button>
+  )
+}
+
 function ServingRow({
   name,
   nutrients,
@@ -149,14 +171,12 @@ function ServingRow({
             {sub ? ` · ${sub}` : ''}
           </div>
         </button>
-        <button className="add-btn" aria-label={`Add ${name}`} onClick={() => onAdd(1)}>
-          +
-        </button>
+        <AddButton label={`Add ${name}`} onClick={() => onAdd(1)} />
       </div>
       {expanded && (
         <div className="row gap expand">
           <MacroLine n={nutrients} className="grow" />
-          <div style={{ width: 110 }}>
+          <div className="servings-input">
             <NumberField label="Servings" value={servings} onChange={setServings} step="0.25" />
           </div>
           <button className="btn primary" disabled={toNum(servings) <= 0} onClick={() => onAdd(toNum(servings))}>
@@ -228,7 +248,8 @@ function RecentTab({ data, date, slot, onAdd }: { data: AppData; date: DateKey; 
 
   const row = (e: FoodEntry, sub?: string) => (
     <ServingRow
-      key={e.id}
+      // Keyed by food, not entry id: adding makes a newer entry, and the row (and its ✓ feedback) should survive that.
+      key={foodKey(e)}
       name={e.name}
       nutrients={e.nutrients}
       servingLabel={e.servingLabel}
@@ -268,9 +289,8 @@ function RecentTab({ data, date, slot, onAdd }: { data: AppData; date: DateKey; 
                       {kcal(m.calories)} kcal · {SLOT_LABELS[m.slot]}, {formatDayLabel(m.date).toLowerCase()}
                     </div>
                   </div>
-                  <button
-                    className="add-btn"
-                    aria-label={`Add all ${m.entries.length} items from ${SLOT_LABELS[m.slot]} ${formatDayLabel(m.date)}`}
+                  <AddButton
+                    label={`Add all ${m.entries.length} items from ${SLOT_LABELS[m.slot]} ${formatDayLabel(m.date)}`}
                     onClick={() => {
                       const copies = store.copyEntries(m.date, date, m.slot, slot)
                       toast(`Added ${copies.length} items to ${SLOT_LABELS[slot]}`, {
@@ -278,9 +298,7 @@ function RecentTab({ data, date, slot, onAdd }: { data: AppData; date: DateKey; 
                         run: () => store.deleteEntries(copies.map((c) => c.id)),
                       })
                     }}
-                  >
-                    +
-                  </button>
+                  />
                 </div>
               </li>
             ))}

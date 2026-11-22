@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { toast } from '../components/toast'
-import { NumberField, Segmented, toNum } from '../components/ui'
+import { NumberField, Segmented, signed, toNum } from '../components/ui'
+import { IconX } from '../components/Icons'
 import { addDays, formatDayLabel, formatShort, fromDateKey, today } from '../lib/date'
 import { trendWeights } from '../lib/nutrition'
 import { projectGoalDate } from '../lib/insights'
@@ -38,7 +39,7 @@ export function Weight({ data }: { data: AppData }) {
   const projection = useMemo(() => projectGoalDate(data, today()), [data])
 
   const change = (from?: number, to?: number) =>
-    from === undefined || to === undefined ? '—' : `${to - from > 0 ? '+' : ''}${displayWeight(to - from, unit)} ${unit}`
+    from === undefined || to === undefined ? '—' : `${signed(to - from, displayWeight(Math.abs(to - from), unit))} ${unit}`
 
   return (
     <div className="screen">
@@ -94,7 +95,7 @@ export function Weight({ data }: { data: AppData }) {
             </div>
             {goalKg && (
               <div>
-                <b>{change(latest.trend, goalKg).replace('+', '')}</b>
+                <b>{change(latest.trend, goalKg).replace(/^[+\u2212]/, '')}</b>
                 <span>To goal</span>
               </div>
             )}
@@ -158,13 +159,13 @@ export function Weight({ data }: { data: AppData }) {
                     </span>
                     <button
                       className="icon-btn small"
-                      aria-label="Delete weigh-in"
+                      aria-label={`Delete weigh-in, ${formatDayLabel(w.date)}`}
                       onClick={() => {
                         store.deleteWeight(w.date)
                         toast('Weigh-in deleted', { label: 'Undo', run: () => store.logWeight(w) })
                       }}
                     >
-                      ✕
+                      <IconX size={16} strokeWidth={2.4} />
                     </button>
                   </div>
                 </li>

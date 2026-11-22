@@ -172,8 +172,15 @@ export default function App() {
 
       <nav className="tabbar">
         {TABS.map((t) => (
-          <button key={t.id} className={t.id === tab ? 'active' : ''} onClick={() => switchTab(t.id)}>
-            <t.Icon size={24} strokeWidth={t.id === tab ? 2.4 : 2} />
+          <button
+            key={t.id}
+            className={t.id === tab ? 'active' : ''}
+            aria-current={t.id === tab ? 'page' : undefined}
+            onClick={() => switchTab(t.id)}
+          >
+            <span className="tab-icon">
+              <t.Icon size={24} strokeWidth={t.id === tab ? 2.4 : 2} />
+            </span>
             {t.label}
           </button>
         ))}

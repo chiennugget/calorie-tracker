@@ -47,6 +47,9 @@
   --hero-over: #d6453c;
 
   --seg-active: #ffffff;
+  /* Small white pills that sit on meal pastels */
+  --pill-bg: #ffffff;
+  --pill-ink: #1b1915;
   --radius: 22px;
   --radius-sm: 14px;
 
@@ -96,6 +99,8 @@
     --hero: #2f55e0;
     --hero-over: #b8433b;
     --seg-active: #3a352e;
+    --pill-bg: rgb(255 255 255 / 0.11);
+    --pill-ink: var(--text);
     color-scheme: dark;
   }
 }
@@ -105,6 +110,14 @@
 html, body { margin: 0; background: var(--bg); color: var(--text); }
 body { min-height: 100dvh; }
 button, input, select { font: inherit; color: inherit; }
+/* Feel native on iOS: no grey tap flash (every control has its own :active state),
+   no 300 ms double-tap-zoom delay, no text selection when a button is long-pressed. */
+button, a, label, input, select { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button { -webkit-user-select: none; user-select: none; }
+/* Visible keyboard focus everywhere (inputs keep their own focus halo). */
+:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+input:focus-visible, select:focus-visible { outline: none; }
+.week-day:focus-visible, .meal-item:focus-visible, .menu button:focus-visible { outline-offset: -2px; }
 h1, h2, h3, h4 { margin: 0; letter-spacing: -0.02em; }
 h3 { font-size: 1.05rem; font-weight: 700; }
 p { margin: 0; }
@@ -139,6 +152,11 @@ p { margin: 0; }
   background: var(--bg);
 }
 .title-block { min-width: 0; }
+/* Hairline under the sticky header once content scrolls beneath it (scroll-driven, progressive). */
+@supports (animation-timeline: scroll()) {
+  .topbar { animation: topbar-edge linear both; animation-timeline: scroll(root); animation-range: 0 40px; }
+  @keyframes topbar-edge { to { box-shadow: 0 1px 0 var(--border); } }
+}
 .eyebrow { font-size: 0.82rem; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 .topbar h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.04em; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-back { display: inline-flex; align-items: center; gap: 2px; background: none; border: none; padding: 0; margin-left: -6px; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.035em; color: var(--text); cursor: pointer; }
@@ -184,15 +202,18 @@ input[type='checkbox'] { -webkit-appearance: auto; appearance: auto; width: 20px
 .btn.ghost { background: transparent; }
 .btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); background: transparent; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.pill-btn { display: inline-flex; align-items: center; gap: 6px; border: none; background: #fff; color: #1b1915; padding: 9px 16px; border-radius: 999px; font-weight: 650; font-size: 0.92rem; cursor: pointer; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06); min-height: 40px; }
+.pill-btn { display: inline-flex; align-items: center; gap: 6px; border: none; background: var(--pill-bg); color: var(--pill-ink); padding: 9px 16px; border-radius: 999px; font-weight: 650; font-size: 0.92rem; cursor: pointer; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06); min-height: 40px; }
 .pill-btn.ghost { background: transparent; box-shadow: none; color: var(--text); opacity: 0.75; padding-inline: 8px; }
 .pill-btn.dark { background: var(--ink-btn); color: var(--ink-btn-text); }
 .link { background: none; border: none; padding: 6px 0; color: var(--accent); font-weight: 650; cursor: pointer; }
+.link.back { display: inline-flex; align-items: center; gap: 2px; margin-left: -4px; min-height: 40px; }
 .link.muted { color: var(--muted); }
 .plain { background: none; border: none; padding: 0; cursor: pointer; }
 .icon-btn { background: none; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem; cursor: pointer; color: var(--muted); display: grid; place-items: center; }
-.icon-btn.small { width: 30px; height: 30px; font-size: 0.85rem; }
-.icon-btn:hover { background: var(--grid); }
+.icon-btn.small { position: relative; width: 32px; height: 32px; font-size: 0.85rem; }
+/* Keep small delete buttons visually quiet but give them a 44 px tap area. */
+.icon-btn.small::after { content: ''; position: absolute; inset: -6px; }
+.icon-btn:active { background: var(--grid); }
 .chip { border: 1.5px solid var(--border); background: var(--card); padding: 7px 14px; border-radius: 999px; font-size: 0.9rem; font-weight: 600; cursor: pointer; min-height: 38px; white-space: nowrap; }
 .chip.active { background: var(--ink-btn); border-color: var(--ink-btn); color: var(--ink-btn-text); }
 .chip.ghost { border-style: dashed; color: var(--muted); }
@@ -210,7 +231,11 @@ input[type='checkbox'] { -webkit-appearance: auto; appearance: auto; width: 20px
 .item-name { font-weight: 600; display: block; }
 .list-item .item-name + .muted { display: block; }
 .kcal { font-weight: 700; font-variant-numeric: tabular-nums; }
-.add-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--accent-soft); color: var(--accent); font-size: 1.4rem; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+.add-btn { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--accent-soft); color: var(--accent); cursor: pointer; flex-shrink: 0; display: grid; place-items: center; }
+.add-btn.done { background: var(--good); color: #fff; animation: pop 0.3s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@media (prefers-color-scheme: dark) { .add-btn.done { color: var(--bg); } }
+@keyframes pop { 50% { transform: scale(1.12); } }
+.servings-input { width: 110px; flex-shrink: 0; }
 .expand { margin-top: 8px; align-items: flex-end; }
 .empty { text-align: center; padding: 24px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .chev { color: var(--muted); font-size: 1.3rem; padding-left: 8px; }
@@ -283,6 +308,8 @@ input[type='checkbox'] { -webkit-appearance: auto; appearance: auto; width: 20px
 .meal-item:active { background: rgb(0 0 0 / 0.04); }
 .meal-item.static { cursor: default; }
 .item-sub { display: block; font-size: 0.8rem; color: var(--muted); }
+.meal-item .kcal { white-space: nowrap; }
+.kcal .unit { font-size: 0.78rem; font-weight: 550; color: var(--muted); }
 .meal-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .exercise-card .meal-emoji { background: var(--card-2); }
 
@@ -310,6 +337,9 @@ input[type='checkbox'] { -webkit-appearance: auto; appearance: auto; width: 20px
 .tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; background: var(--card); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); z-index: 7; }
 .tabbar button { flex: 1; max-width: 160px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 0 10px; border: none; background: none; font-size: 0.72rem; font-weight: 650; color: var(--muted); cursor: pointer; }
 .tabbar button.active { color: var(--accent); }
+.tab-icon { display: grid; place-items: center; width: 56px; height: 30px; border-radius: 999px; transition: background 0.2s, transform 0.15s; }
+.tabbar button.active .tab-icon { background: var(--accent-soft); }
+.tabbar button:active .tab-icon { transform: scale(0.9); }
 
 /* ---------- Sheets ---------- */
 .sheet { border: none; padding: 0; margin: auto auto 0; width: 100%; max-width: 640px; max-height: 92dvh; border-radius: 28px 28px 0 0; background: var(--bg); color: var(--text); overscroll-behavior: contain; }
@@ -330,6 +360,17 @@ input[type='checkbox'] { -webkit-appearance: auto; appearance: auto; width: 20px
 .back { align-self: flex-start; }
 .food-title { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.03em; }
 .food-title + p { margin-top: 2px; }
+/* Running total + Add button pinned to the bottom of a sheet while you adjust portions. */
+.sticky-cta {
+  position: sticky; bottom: calc(-24px - env(safe-area-inset-bottom)); z-index: 2;
+  display: flex; align-items: center; gap: 12px;
+  margin: 4px -18px calc(-24px - env(safe-area-inset-bottom));
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  background: var(--card); border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 20px rgb(40 30 20 / 0.06);
+}
+.sticky-cta .btn { flex-shrink: 0; }
+.cta-kcal { font-size: 1.45rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .section-label { margin: 6px 2px 8px; font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 
 /* Scanner */
@@ -395,8 +436,12 @@ input[type='checkbox'] { -webkit-appearance: auto; appearance: auto; width: 20px
 .subpage-title { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.035em; margin: 2px 2px 0; }
 
 /* ---------- Toast ---------- */
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(160px + env(safe-area-inset-bottom)); background: var(--ink-btn); color: var(--ink-btn-text); padding: 12px 16px; border-radius: 999px; display: flex; gap: 14px; align-items: center; font-size: 0.9rem; font-weight: 550; z-index: 1000; max-width: calc(100% - 32px); box-shadow: var(--shadow-float); animation: rise 0.2s ease; }
-.toast button { background: none; border: none; color: var(--accent); font-weight: 750; cursor: pointer; }
+.toast { position: fixed; inset: auto; margin: 0; border: none; overflow: visible; width: max-content; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); background: var(--ink-btn); color: var(--ink-btn-text); padding: 12px 16px; border-radius: 999px; display: flex; gap: 14px; align-items: center; font-size: 0.9rem; font-weight: 550; z-index: 1000; max-width: calc(100% - 32px); box-shadow: var(--shadow-float); animation: rise 0.2s ease; }
+.app:has(.action-pill) .toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
+/* Above an open sheet's pinned Add bar. */
+body:has(.sheet[open]) .toast { bottom: calc(20px + env(safe-area-inset-bottom)); }
+body:has(.sheet[open] .sticky-cta) .toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
+.toast button { background: none; padding: 6px 2px; min-height: 32px; border: none; color: var(--accent); font-weight: 750; cursor: pointer; }
 @media (prefers-color-scheme: dark) { .toast button { color: #2457f5; } }
 @keyframes rise { from { opacity: 0; transform: translate(-50%, 8px); } }
 
@@ -416,8 +461,19 @@ input[type='checkbox'] { -webkit-appearance: auto; appearance: auto; width: 20px
 .diary > .macros-card { animation-delay: 40ms; }
 .diary > .meal-card { animation-delay: 80ms; }
 .btn, .chip, .add-btn, .pill-btn, .action-pill-btn, .week-day, .avatar-btn { transition: transform 0.12s, background 0.2s, opacity 0.2s, color 0.2s; }
-.btn:active:not(:disabled), .chip:active, .add-btn:active, .pill-btn:active, .action-pill-btn:active, .week-day:active { transform: scale(0.95); }
+.btn:active:not(:disabled), .chip:active, .add-btn:active, .pill-btn:active, .action-pill-btn:active, .week-day:active, .step:active { transform: scale(0.95); }
+.meal-item, .list-item .plain, .addons li { transition: background 0.15s; }
+.list-item .plain:active { opacity: 0.6; }
 .action-pill-main:active { opacity: 0.6; }
+@media (hover: hover) and (pointer: fine) {
+  .meal-item:hover, .menu button:hover { background: rgb(0 0 0 / 0.035); }
+  .icon-btn:hover, .week-nav:hover { background: var(--grid); color: var(--text); }
+  .week-day:not(.selected):hover { background: var(--grid); }
+  .btn:not(:disabled):hover, .chip:not(.active):hover, .pill-btn:hover { filter: brightness(0.97); }
+  .btn.primary:not(:disabled):hover, .action-pill-btn:hover { filter: brightness(1.08); }
+  .tabbar button:not(.active):hover { color: var(--text); }
+  .list-item .plain:hover .item-name, .link:hover { text-decoration: underline; text-underline-offset: 3px; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .spinner { animation: spin 1.6s linear infinite !important; }

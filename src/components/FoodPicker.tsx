@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { FoodProduct } from '../lib/foodApi'
 import { scaleNutrients } from '../lib/nutrition'
 import type { Nutrients } from '../lib/types'
-import { MacroLine, NumberField, Segmented, kcal, toNum } from './ui'
+import { BackLink, MacroLine, NumberField, Segmented, kcal, toNum } from './ui'
 
 export interface PickedFood {
   name: string
@@ -36,9 +36,7 @@ export function FoodPicker({
 
   return (
     <div className="stack">
-      <button className="link back" onClick={onBack}>
-        ‹ Back to results
-      </button>
+      <BackLink label="Back to results" onClick={onBack} />
       <div>
         <h3 className="food-title">{product.name}</h3>
         {product.brand && <p className="muted">{product.brand}</p>}
@@ -64,18 +62,20 @@ export function FoodPicker({
         step={mode === 'g' ? '1' : '0.25'}
         autoFocus
       />
-      <div className="card tight center">
-        <div className="big">{kcal(total.calories)} kcal</div>
-        <MacroLine n={total} />
-        <p className="muted small">
-          Per 100 g: {kcal(product.per100g.calories)} kcal
-          {product.perServing && ` · per serving: ${kcal(product.perServing.calories)} kcal`}
-        </p>
-      </div>
+      <p className="muted small">
+        Per 100 g: {kcal(product.per100g.calories)} kcal
+        {product.perServing && ` · per serving: ${kcal(product.perServing.calories)} kcal`}
+      </p>
       <label className="check">
         <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
         Save to My Meals
       </label>
+      <p className="muted small">Data from Open Food Facts (community database) — double-check against the label.</p>
+      <div className="sticky-cta">
+        <div className="grow" aria-live="polite">
+          <div className="cta-kcal">{kcal(total.calories)} kcal</div>
+          <MacroLine n={total} className="small" />
+        </div>
       <button
         className="btn primary"
         disabled={a <= 0}
@@ -103,7 +103,7 @@ export function FoodPicker({
       >
         Add to diary
       </button>
-      <p className="muted small">Data from Open Food Facts (community database) — double-check against the label.</p>
+      </div>
     </div>
   )
 }

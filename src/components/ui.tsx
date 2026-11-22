@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import type { Nutrients } from '../lib/types'
+import { IconChevronLeft, IconX } from './Icons'
 
 /**
  * Locks page scrolling while any sheet is open. iOS Safari ignores
@@ -66,7 +67,7 @@ export function Sheet({
           <header className="sheet-head">
             <h2>{title}</h2>
             <button className="icon-btn" onClick={onClose} aria-label="Close">
-              ✕
+              <IconX size={18} strokeWidth={2.4} />
             </button>
           </header>
           <div className="sheet-body">{children}</div>
@@ -206,3 +207,16 @@ export function toNum(s: string): number {
   const n = parseFloat(s)
   return Number.isFinite(n) ? n : 0
 }
+
+/** "‹ Back" link used inside sheets, with the same chevron as the top bar. */
+export function BackLink({ label = 'Back', onClick }: { label?: string; onClick: () => void }) {
+  return (
+    <button type="button" className="link back" onClick={onClick}>
+      <IconChevronLeft size={18} strokeWidth={2.6} />
+      {label}
+    </button>
+  )
+}
+
+/** Signed number with a true minus sign (−0.4, +1.2) for tabular stats. */
+export const signed = (n: number, text: string | number = Math.abs(n)) => `${n > 0 ? '+' : n < 0 ? '\u2212' : ''}${text}`

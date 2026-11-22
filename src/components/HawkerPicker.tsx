@@ -13,7 +13,7 @@ import {
 } from '../lib/sgFoods'
 import { scaleNutrients } from '../lib/nutrition'
 import type { PickedFood } from './FoodPicker'
-import { MacroLine, NumberField, Segmented, kcal, toNum } from './ui'
+import { BackLink, MacroLine, NumberField, Segmented, kcal, toNum } from './ui'
 
 /** Portion / oil / add-on controls used by the hawker picker. */
 export function DishOptionsEditor({ dish, value, onChange }: { dish: SgDish; value: DishOptions; onChange: (o: DishOptions) => void }) {
@@ -84,9 +84,7 @@ export function HawkerPicker({ dish, onAdd, onBack }: { dish: SgDish; onAdd: (f:
 
   return (
     <div className="stack">
-      <button className="link back" onClick={onBack}>
-        ‹ Back
-      </button>
+      <BackLink onClick={onBack} />
       <div>
         <h3 className="food-title">{dish.name}</h3>
         <p className="muted small">
@@ -95,24 +93,26 @@ export function HawkerPicker({ dish, onAdd, onBack }: { dish: SgDish; onAdd: (f:
       </div>
       <DishOptionsEditor dish={dish} value={opts} onChange={setOpts} />
       <NumberField label={dish.countable ? `Quantity (${dish.serving})` : 'Servings'} value={qty} onChange={setQty} step="0.5" />
-      <div className="card tight center">
-        <div className="big">{kcal(total.calories)} kcal</div>
-        <MacroLine n={total} />
-      </div>
       <label className="check">
         <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
         Save to My Meals
       </label>
-      <button
-        className="btn primary"
-        disabled={toNum(qty) <= 0}
-        onClick={() =>
-          onAdd({ name: describeDish(dish, opts), nutrients: per, servings: toNum(qty), servingLabel: dish.serving, saveToMeals: save })
-        }
-      >
-        Add to diary
-      </button>
       <p className="muted small">Hawker plates vary a lot between stalls — these are typical estimates, not lab values.</p>
+      <div className="sticky-cta">
+        <div className="grow" aria-live="polite">
+          <div className="cta-kcal">{kcal(total.calories)} kcal</div>
+          <MacroLine n={total} className="small" />
+        </div>
+        <button
+          className="btn primary"
+          disabled={toNum(qty) <= 0}
+          onClick={() =>
+            onAdd({ name: describeDish(dish, opts), nutrients: per, servings: toNum(qty), servingLabel: dish.serving, saveToMeals: save })
+          }
+        >
+          Add to diary
+        </button>
+      </div>
     </div>
   )
 }

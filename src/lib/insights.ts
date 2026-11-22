@@ -166,7 +166,8 @@ export interface FoodSuggestion {
   lastUsed: number
 }
 
-const foodKey = (e: FoodEntry) => `${e.name.trim().toLowerCase()}|${Math.round(e.nutrients.calories)}`
+/** Identity of a food for suggestions: same name and calories = same food. */
+export const foodKey = (e: FoodEntry) => `${e.name.trim().toLowerCase()}|${Math.round(e.nutrients.calories)}`
 
 /** Distinct foods you've logged, most recent first, with how often each was logged per slot. */
 export function recentFoods(data: AppData, slot: MealSlot, limit = 40): FoodSuggestion[] {

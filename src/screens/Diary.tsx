@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { MealForm } from '../components/MealForm'
 import { toast } from '../components/toast'
 import { MacroLine, NumberField, Ring, Sheet, fmt, kcal, toNum } from '../components/ui'
-import { IconChevronLeft, IconChevronRight, IconCopy, IconDrop, IconPlus, IconRun } from '../components/Icons'
+import { IconChevronLeft, IconChevronRight, IconCopy, IconDrop, IconPlus, IconRun, IconX } from '../components/Icons'
 import { addDays, formatDayLabel, fromDateKey, today } from '../lib/date'
 import { daySummary, entriesFor, entryTotal, sumEntries } from '../lib/nutrition'
 import { shouldRemindBackup, weekBudget, weekOf } from '../lib/insights'
@@ -206,7 +206,10 @@ export function Diary({
                             {e.servingLabel ?? (e.servings !== 1 ? 'serving' : '')}
                           </span>
                         </span>
-                        <span className="kcal">{kcal(t.calories)}</span>
+                        <span className="kcal">
+                          {kcal(t.calories)}
+                          <span className="unit"> kcal</span>
+                        </span>
                       </button>
                     </li>
                   )
@@ -290,9 +293,19 @@ export function Diary({
                   <span className="item-name">{x.name}</span>
                   {x.minutes ? <span className="item-sub">{x.minutes} min</span> : null}
                 </span>
-                <span className="kcal">{kcal(x.calories)}</span>
-                <button className="icon-btn small" aria-label="Delete exercise" onClick={() => store.deleteExercise(x.id)}>
-                  ✕
+                <span className="kcal">
+                  {kcal(x.calories)}
+                  <span className="unit"> kcal</span>
+                </span>
+                <button
+                  className="icon-btn small"
+                  aria-label={`Delete exercise, ${x.name}`}
+                  onClick={() => {
+                    store.deleteExercise(x.id)
+                    toast(`Deleted ${x.name}`, { label: 'Undo', run: () => store.addExercise({ ...x }) })
+                  }}
+                >
+                  <IconX size={16} strokeWidth={2.4} />
                 </button>
               </li>
             ))}
